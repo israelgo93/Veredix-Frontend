@@ -1,3 +1,4 @@
+//chat-legal/src/components/theme-toggle.tsx
 "use client"
 import { Moon, Sun, Laptop, Settings } from "lucide-react"
 import { useTheme } from "next-themes"

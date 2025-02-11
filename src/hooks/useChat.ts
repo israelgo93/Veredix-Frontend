@@ -1,3 +1,4 @@
+//chat-legal/src/hooks/useChat.ts
 import { useState, useCallback, useRef } from "react"
 
 export interface Message {

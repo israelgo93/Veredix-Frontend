@@ -1,3 +1,4 @@
+//chat-legal/src/components/QuickActions.tsx
 import { Button } from "@/components/ui/button"
 import { FileText, Eye, PenLine, BarChart3, Scale, Building2, Users, Lightbulb } from "lucide-react"
 

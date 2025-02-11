@@ -1,3 +1,4 @@
+//chat-legal/src/components/ChatInterface.tsx
 "use client"
 
 import * as React from "react"

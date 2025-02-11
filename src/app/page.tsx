@@ -1,3 +1,4 @@
+//chat-legal/src/app/page.tsx
 "use client";
 import ChatInterface from '../components/ChatInterface'
 // O alternativamente:

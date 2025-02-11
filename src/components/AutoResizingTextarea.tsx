@@ -1,3 +1,4 @@
+//chat-legal/src/components/AutoResizingTextarea.tsx
 import React, { useCallback, useEffect, useRef } from "react"
 import { Textarea } from "@/components/ui/textarea"
 import { cn } from "@/lib/utils"
