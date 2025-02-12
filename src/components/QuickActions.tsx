@@ -1,6 +1,8 @@
-//chat-legal/src/components/QuickActions.tsx
+//src/components/QuickActions.tsx
+"use client"
+
 import { Button } from "@/components/ui/button"
-import { FileText, Eye, PenLine, BarChart3, Scale, Building2, Users, Lightbulb } from "lucide-react"
+import { PenLine, BarChart3, Scale, Building2, Users, Lightbulb } from "lucide-react"
 
 interface QuickActionsProps {
   onQuickAction: (text: string) => void
@@ -41,7 +43,7 @@ const quickActionButtons = [
 
 export function QuickActions({ onQuickAction }: QuickActionsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 w-full mx-auto max-w-3xl">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 w-full mx-auto max-w-3xl">
       {quickActionButtons.map((button, index) => (
         <Button
           key={index}
@@ -56,4 +58,3 @@ export function QuickActions({ onQuickAction }: QuickActionsProps) {
     </div>
   )
 }
-
