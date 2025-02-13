@@ -1,4 +1,4 @@
-//chat-legal/src/hooks/useChat.ts
+// chat-legal/src/hooks/useChat.ts
 import { useState, useCallback, useRef } from "react"
 
 export interface Message {
@@ -15,6 +15,7 @@ export interface ApiResponse {
   extra_data?: {
     references?: any[]
   }
+  session_id?: string  // Campo opcional para recibir el session_id
 }
 
 export interface Source {
@@ -128,9 +129,11 @@ export function useChat() {
         const formData = new FormData()
         formData.append("message", message)
         formData.append("stream", "true")
-        formData.append("monitor", "false")
-        formData.append("session_id", "")
-        formData.append("user_id", "user-id")
+        formData.append("monitor", "true")
+        // Recupera el session_id almacenado en sessionStorage (si existe)
+        const storedSessionId = sessionStorage.getItem('session_id') || ""
+        formData.append("session_id", storedSessionId)
+        formData.append("user_id", "ijgc93_0ec5")
 
         abortControllerRef.current = new AbortController()
 
@@ -155,6 +158,11 @@ export function useChat() {
           const jsonObjects = processJsonObjects(chunk)
 
           for (const parsedData of jsonObjects) {
+            // Si se recibe un session_id y aún no se ha almacenado, se guarda en sessionStorage
+            if (parsedData.session_id && !sessionStorage.getItem('session_id')) {
+              sessionStorage.setItem('session_id', parsedData.session_id)
+            }
+
             if (parsedData.event === "RunResponse" && parsedData.content) {
               currentContentRef.current += parsedData.content
               updateAssistantMessage(currentContentRef.current)
