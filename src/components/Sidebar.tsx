@@ -1,120 +1,89 @@
-//home/phiuser/phi/chat-legal/src/components/Sidebar.tsx
-"use client";
-
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import {
-  ChevronRight,
-  LogOut,
-  MessageSquarePlus,
-  Menu,
-  User,
-  LogIn,
-} from "lucide-react";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import React from "react"
+import { X } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 interface SidebarProps {
-  isAuthenticated?: boolean;
-  userName?: string;
-  onNewChat: () => void;
-  onLogout?: () => void;
-  onLogin?: () => void;
+  isOpen: boolean
+  onClose: () => void
 }
 
-export function Sidebar({
-  isAuthenticated = false,
-  userName = "",
-  onNewChat,
-  onLogout,
-  onLogin,
-}: SidebarProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   return (
-    <Sheet>
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          // Se aumenta el z-index para asegurar que se muestre sobre el header
-          className="fixed left-4 top-4 z-60 h-8 w-8 rounded-full bg-background/80 backdrop-blur-sm"
-        >
-          <Menu className="h-4 w-4" />
-        </Button>
-      </SheetTrigger>
-      <SheetContent
-        side="left"
-        className="w-[280px] border-r bg-background/80 backdrop-blur-sm p-0"
-      >
-        <SheetHeader className="border-b px-4 py-4">
-          <SheetTitle className="flex items-center justify-between">
-            <span>Menú</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={() => setIsExpanded(!isExpanded)}
-            >
-              <ChevronRight
-                className={cn(
-                  "h-4 w-4 transition-transform",
-                  isExpanded && "rotate-180"
-                )}
-              />
-            </Button>
-          </SheetTitle>
-        </SheetHeader>
-
-        <div className="flex flex-col h-full">
-          {/* Contenido principal */}
-          <div className="flex-1 overflow-auto px-4 py-4">
-            <Button
-              variant="ghost"
-              className="w-full justify-start gap-2 mb-2"
-              onClick={onNewChat}
-            >
-              <MessageSquarePlus className="h-4 w-4" />
-              <span>Nuevo Chat</span>
-            </Button>
-          </div>
-
-          {/* Footer con opciones de usuario */}
-          <div className="border-t p-4">
-            {isAuthenticated ? (
-              <>
-                <div className="flex items-center gap-2 mb-2">
-                  <User className="h-4 w-4" />
-                  <span>{userName}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start gap-2"
-                  onClick={onLogout}
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Cerrar Sesión</span>
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="ghost"
-                className="w-full justify-start gap-2"
-                onClick={onLogin}
-              >
-                <LogIn className="h-4 w-4" />
-                <span>Iniciar Sesión</span>
-              </Button>
-            )}
-          </div>
+    <div
+      className={`
+        fixed top-0 left-0 h-full w-64 bg-background shadow-lg z-50
+        transform transition-transform duration-300
+        ${isOpen ? "translate-x-0" : "-translate-x-full"}
+      `}
+    >
+      <div className="flex flex-col h-full">
+        {/* Encabezado del Sidebar */}
+        <div className="flex items-center justify-between p-4 border-b border-border">
+          <h2 className="text-base font-semibold">Menú</h2>
+          <Button variant="ghost" size="icon" onClick={onClose}>
+            <X className="h-5 w-5" />
+          </Button>
         </div>
-      </SheetContent>
-    </Sheet>
-  );
+
+        {/* Contenido principal del Sidebar */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2 text-sm">
+          {/* Ejemplo de secciones que aparecen en tu screenshot */}
+          <Link href="/community" className="hover:underline">
+            Community
+          </Link>
+          <Link href="/library" className="hover:underline">
+            Library
+          </Link>
+          <Link href="/projects" className="hover:underline">
+            Projects
+          </Link>
+          <Link href="/feedback" className="hover:underline">
+            Feedback
+          </Link>
+
+          {/* Ejemplo: sección "Recent Chats" */}
+          <div className="mt-4">
+            <h3 className="text-xs font-bold uppercase mb-2 text-muted-foreground">
+              Recent Chats
+            </h3>
+            <ul className="space-y-1">
+              <li>
+                <Link href="/chat/document-translation" className="hover:underline">
+                  Document translation
+                </Link>
+              </li>
+              <li>
+                <Link href="/chat/abogado-labor-laws" className="hover:underline">
+                  Abogado labor laws
+                </Link>
+              </li>
+              <li>
+                <Link href="/chat/invalid-input" className="hover:underline">
+                  Invalid input
+                </Link>
+              </li>
+              <li>
+                <Link href="/chat/python-xml-api" className="hover:underline">
+                  Python xml api
+                </Link>
+              </li>
+              <li>
+                <Link href="/chat/inpaint" className="hover:underline">
+                  Inpaint input
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Podrías añadir más enlaces, secciones, etc. */}
+        </div>
+
+        {/* Footer del Sidebar */}
+        <div className="p-4 border-t border-border text-xs text-muted-foreground">
+          © 2025 - Chat Legal IA
+        </div>
+      </div>
+    </div>
+  )
 }
