@@ -5,7 +5,21 @@ import { useState, useEffect, useRef, useCallback, type FormEvent, type Keyboard
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
-import { Paperclip, ArrowUp, ArrowDown, Copy, RotateCcw, Share, User, Loader2, Check, BookOpen, Menu, X } from "lucide-react" // <-- se conservan los imports originales
+import {
+  Paperclip,
+  ArrowUp,
+  ArrowDown,
+  Copy,
+  RotateCcw,
+  Share,
+  User,
+  Loader2,
+  Check,
+  BookOpen,
+  Menu,
+  ChevronsLeft,
+  ChevronsRight,
+} from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
@@ -15,15 +29,9 @@ import AutoResizingTextarea from "./AutoResizingTextarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { QuickActions } from "./QuickActions"
-
-// -----------------------------------------------------------------------------
-// IMPORTA O DEFINE TU SIDEBAR PLEGABLE
-// -----------------------------------------------------------------------------
 import { Sidebar } from "./Sidebar"
+import { ThemeToggle } from "./theme-toggle"
 
-// -----------------------------------------------------------------------------
-// HOOK: Detecta si se está en modo móvil (ancho menor a 768px)
-// -----------------------------------------------------------------------------
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
@@ -35,9 +43,6 @@ function useIsMobile() {
   return isMobile
 }
 
-// -----------------------------------------------------------------------------
-// ESTILOS PARA MARKDOWN (se mantienen los originales)
-// -----------------------------------------------------------------------------
 const markdownStyles = {
   root: "space-y-4 leading-normal text-sm md:text-base",
   p: "mb-3 leading-relaxed",
@@ -54,9 +59,6 @@ const markdownStyles = {
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
-// -----------------------------------------------------------------------------
-// COMPONENTE: ThinkingIndicator (se muestra mientras la IA responde)
-// -----------------------------------------------------------------------------
 const ThinkingIndicator = () => (
   <div className="inline-flex items-center gap-2 px-3 py-2">
     <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
@@ -72,9 +74,6 @@ const ThinkingIndicator = () => (
   </div>
 )
 
-// -----------------------------------------------------------------------------
-// COMPONENTE: SourceAccordion (acordeón para cada fuente)
-// -----------------------------------------------------------------------------
 interface SourceAccordionProps {
   source: Source
 }
@@ -84,7 +83,7 @@ const SourceAccordion = ({ source }: SourceAccordionProps) => {
   const summary = source.content.length > 100 ? source.content.slice(0, 100).trim() + "..." : source.content
 
   return (
-    <div className="border-b border-gray-200 dark:border-gray-700 pb-2 mb-2">
+    <div className="border-b border-border pb-2 mb-2">
       <div className="flex items-center justify-between">
         <div>
           <span className="font-semibold text-xs md:text-sm">{source.name}</span>
@@ -93,13 +92,13 @@ const SourceAccordion = ({ source }: SourceAccordionProps) => {
         <Button
           variant="ghost"
           size="sm"
-          className="text-muted-foreground text-xs"
+          className="text-muted-foreground text-xs transition-transform duration-200 hover:scale-105 active:scale-95"
           onClick={() => setExpanded((prev) => !prev)}
         >
           {expanded ? "Mostrar menos" : "Leer más"}
         </Button>
       </div>
-      <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">
+      <div className="mt-1 text-xs text-muted-foreground">
         {expanded ? (
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
             {source.content}
@@ -112,21 +111,14 @@ const SourceAccordion = ({ source }: SourceAccordionProps) => {
   )
 }
 
-// -----------------------------------------------------------------------------
-// COMPONENTE: SourcesList (lista de fuentes)
-// -----------------------------------------------------------------------------
 const SourcesList = ({ sources }: { sources: Source[] }) => (
   <div className="space-y-2">
     {sources.map((source, index) => (
-      // Se recomienda usar un identificador único en lugar del índice si está disponible.
       <SourceAccordion key={index} source={source} />
     ))}
   </div>
 )
 
-// -----------------------------------------------------------------------------
-// COMPONENTE: MessageActions (acciones sobre cada mensaje de la IA)
-// -----------------------------------------------------------------------------
 interface MessageActionsProps {
   content: string
   copyToClipboard: (text: string) => void
@@ -177,7 +169,12 @@ const MessageActions = ({
       <div className="flex flex-wrap items-center gap-1 mt-2">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 p-0" onClick={handleCopy}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
+              onClick={handleCopy}
+            >
               {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
             </Button>
           </TooltipTrigger>
@@ -188,7 +185,12 @@ const MessageActions = ({
 
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 p-0" onClick={onRegenerate}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
+              onClick={onRegenerate}
+            >
               <RotateCcw className="h-4 w-4" />
             </Button>
           </TooltipTrigger>
@@ -201,7 +203,11 @@ const MessageActions = ({
           <Tooltip>
             <TooltipTrigger asChild>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
+                >
                   <Share className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -221,7 +227,12 @@ const MessageActions = ({
         {hasSources && toggleSources && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 p-0" onClick={toggleSources}>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
+                onClick={toggleSources}
+              >
                 <BookOpen className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
@@ -235,9 +246,6 @@ const MessageActions = ({
   )
 }
 
-// -----------------------------------------------------------------------------
-// COMPONENTE: SourcesDrawer (panel lateral para mostrar las fuentes)
-// -----------------------------------------------------------------------------
 interface SourcesDrawerProps {
   sources: Source[]
   onClose: () => void
@@ -252,26 +260,24 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
         onClose()
       }
     }
-
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [onClose])
 
   return (
     <div className="fixed inset-0 z-[9999] overflow-hidden">
-      {/* Overlay con efecto blur */}
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
-      {/* Contenedor del Drawer, ubicado a la derecha */}
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div ref={drawerRef} className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative">
+        <div
+          ref={drawerRef}
+          className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative"
+        >
           <button
             onClick={onClose}
-            className="absolute top-2 right-2 z-[10000] rounded-md p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary"
+            className="absolute top-2 right-2 z-[10000] rounded-md p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition-transform duration-200 hover:scale-105 active:scale-95"
+            aria-label="Cerrar panel de fuentes"
           >
-            <span className="sr-only">Cerrar panel</span>
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <ChevronsRight className="h-6 w-6" />
           </button>
           <div className="flex h-full flex-col overflow-hidden bg-background/50 backdrop-blur-sm rounded-xl shadow-lg">
             <div className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/70 px-4 py-3">
@@ -289,12 +295,8 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
   )
 }
 
-// -----------------------------------------------------------------------------
-// COMPONENTE PRINCIPAL: ChatInterface
-// -----------------------------------------------------------------------------
 interface ChatInterfaceProps {
   onChatStarted?: () => void
-  // Se agregan estas props para poder pasarlas al Sidebar
   onNewChat?: () => void
   isAuthenticated?: boolean
   userName?: string
@@ -317,25 +319,22 @@ const ChatInterface = ({
   const [showSources, setShowSources] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
-  // Estado para identificar qué mensaje del asistente se está regenerando (por índice)
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isMobile = useIsMobile()
   const isScrollingRef = useRef(false)
-
-  // NUEVO: Estado para mostrar/ocultar el Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // Notificar al layout que se inició la conversación (por ejemplo, para ocultar el header)
+  // Notificar al layout que se inició la conversación
   useEffect(() => {
     if (!isInitialView) {
       onChatStarted?.()
     }
   }, [isInitialView, onChatStarted])
 
-  // Auto-scroll al final cuando la IA responde
+  // Auto-scroll
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
@@ -349,7 +348,6 @@ const ChatInterface = ({
     }
   }, [isLoading])
 
-  // Manejo del scroll para mostrar/ocultar el botón "scroll to bottom"
   const handleScroll = () => {
     const container = messagesContainerRef.current
     if (container) {
@@ -358,7 +356,6 @@ const ChatInterface = ({
     }
   }
 
-  // Desplazamiento suave hasta el final
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current && !isScrollingRef.current) {
       isScrollingRef.current = true
@@ -369,7 +366,6 @@ const ChatInterface = ({
     }
   }, [])
 
-  // La animación "Pensando..." se mostrará si el mensaje del asistente está vacío y aún se está cargando
   useEffect(() => {
     if (!isLoading) {
       setRegeneratingIndex(null)
@@ -450,22 +446,30 @@ const ChatInterface = ({
   }
 
   return (
-    // Contenedor principal; se mantiene el top: "64px" para respetar la altura original cuando aún aparece el header layout (y cuando se oculta, nuestro header de toggle ocupará esa posición)
     <div className="flex bg-transparent text-sm overflow-hidden fixed inset-x-0 bottom-0" style={{ top: "64px" }}>
-      {/* Si ya se inició el chat, en lugar del header original se muestra un header fijo con el botón toggle en la posición del header layout */}
-      {!isInitialView && (
-        <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-4 bg-background shadow-md z-50">
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 bg-card/80 hover:bg-card rounded-md shadow-md flex items-center"
-          >
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+      {/* En móvil, header fijo con el botón toggle + Toggle Theme (opcional) una vez iniciada la conversación */}
+      {!isInitialView && isMobile && (
+        <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-background shadow-md z-50 justify-between">
+          <div>
+            <Button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              variant="ghost"
+              size="icon"
+              className="p-2 bg-card/80 hover:bg-card rounded-md shadow-md transition-transform duration-200 hover:scale-105 active:scale-95"
+              aria-label={sidebarOpen ? "Cerrar barra lateral" : "Abrir barra lateral"}
+            >
+              {sidebarOpen ? <ChevronsLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          </div>
+          {/* Opcional: Toggle Theme en mobile, si hay espacio */}
+          <div>
+            <ThemeToggle />
+          </div>
         </header>
       )}
 
-      {/* Contenedor del Chat y panel de Fuentes */}
-      <div className="flex flex-1 flex-col transition-all duration-300" style={{ width: "100%" }}>
+      {/* Contenedor principal del chat */}
+      <div className="flex-1 flex flex-col transition-all duration-300" style={{ width: "100%" }}>
         {errorMessage && (
           <div className="max-w-3xl mx-auto px-4 py-2">
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -502,12 +506,17 @@ const ChatInterface = ({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="text-muted-foreground rounded-full transition-colors"
+                        className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
                         disabled={!input.trim()}
                       >
                         <Paperclip className="h-4 w-4" />
                       </Button>
-                      <Button type="submit" size="icon" className="rounded-full transition-colors" disabled={!input.trim()}>
+                      <Button
+                        type="submit"
+                        size="icon"
+                        className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
+                        disabled={!input.trim()}
+                      >
                         <ArrowUp className="h-4 w-4" />
                       </Button>
                     </div>
@@ -519,7 +528,6 @@ const ChatInterface = ({
           </div>
         ) : (
           <>
-            {/* Área de mensajes; se añade overflow-x-hidden para evitar scroll horizontal en móvil */}
             <div
               ref={messagesContainerRef}
               onScroll={handleScroll}
@@ -532,7 +540,11 @@ const ChatInterface = ({
                   return (
                     <div key={index} className="group flex justify-center">
                       <div className="w-full max-w-full sm:max-w-3xl">
-                        <div className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                        <div
+                          className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${
+                            message.role === "user" ? "justify-end" : "justify-start"
+                          }`}
+                        >
                           {message.role === "assistant" ? (
                             <Avatar className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 border">
                               <div className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xs md:text-sm font-medium">
@@ -546,8 +558,18 @@ const ChatInterface = ({
                               </div>
                             </Avatar>
                           )}
-                          <div className={`w-full flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}>
-                            <div className={`w-full max-w-[85%] sm:max-w-[90%] px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 bg-card/30 backdrop-blur-sm flex items-center rounded-lg ${message.role === "user" ? "text-primary justify-end" : "text-foreground justify-start"}`}>
+                          <div
+                            className={`w-full flex flex-col ${
+                              message.role === "user" ? "items-end" : "items-start"
+                            }`}
+                          >
+                            <div
+                              className={`w-full max-w-[85%] sm:max-w-[90%] px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 bg-card/30 backdrop-blur-sm flex items-center rounded-lg ${
+                                message.role === "user"
+                                  ? "text-primary justify-end"
+                                  : "text-foreground justify-start"
+                              }`}
+                            >
                               {message.role === "assistant" && showThinking ? (
                                 <ThinkingIndicator />
                               ) : (
@@ -561,11 +583,21 @@ const ChatInterface = ({
                                       h2: ({ children }) => <h2 className={markdownStyles.h2}>{children}</h2>,
                                       h3: ({ children }) => <h3 className={markdownStyles.h3}>{children}</h3>,
                                       h4: ({ children }) => <h4 className={markdownStyles.h4}>{children}</h4>,
-                                      ul: ({ children }) => <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>,
-                                      ol: ({ children }) => <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>,
+                                      ul: ({ children }) => (
+                                        <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
+                                      ),
+                                      ol: ({ children }) => (
+                                        <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
+                                      ),
                                       li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                                      a: ({ href, children }) => <a href={href} className={markdownStyles.a}>{children}</a>,
-                                      blockquote: ({ children }) => <blockquote className={markdownStyles.blockquote}>{children}</blockquote>,
+                                      a: ({ href, children }) => (
+                                        <a href={href} className={markdownStyles.a}>
+                                          {children}
+                                        </a>
+                                      ),
+                                      blockquote: ({ children }) => (
+                                        <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
+                                      ),
                                       code: ({ inline, children }) =>
                                         inline ? (
                                           <code className={markdownStyles.code}>{children}</code>
@@ -581,10 +613,21 @@ const ChatInterface = ({
                                           </table>
                                         </div>
                                       ),
-                                      th: ({ children }) => <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">{children}</th>,
-                                      td: ({ children }) => <td className="border border-border px-3 py-2 whitespace-normal">{children}</td>,
+                                      th: ({ children }) => (
+                                        <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
+                                          {children}
+                                        </th>
+                                      ),
+                                      td: ({ children }) => (
+                                        <td className="border border-border px-3 py-2 whitespace-normal">{children}</td>
+                                      ),
                                       hr: () => <hr className="my-6 border-border" />,
-                                      img: (props) => <img {...props} className="rounded-lg border border-border max-w-full h-auto" />,
+                                      img: (props) => (
+                                        <img
+                                          {...props}
+                                          className="rounded-lg border border-border max-w-full h-auto"
+                                        />
+                                      ),
                                       strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                                       em: ({ children }) => <em className="italic">{children}</em>,
                                     }}
@@ -613,7 +656,7 @@ const ChatInterface = ({
               </div>
             </div>
 
-            {/* Botón para volver al final de la conversación, centrado justo encima del input */}
+            {/* Zona de input */}
             <div className="bg-transparent">
               <div className="max-w-3xl mx-auto px-3 md:px-4 py-3 md:py-4">
                 <Card className="p-0 shadow-lg mx-auto w-full bg-background/50 backdrop-blur-sm rounded-xl border-0 relative">
@@ -649,15 +692,15 @@ const ChatInterface = ({
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="text-muted-foreground rounded-full transition-colors"
-                          disabled={!input.trim()}
+                          className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
+                          disabled={isLoading || !input.trim()}
                         >
                           <Paperclip className="h-4 w-4" />
                         </Button>
                         <Button
                           type="submit"
                           size="icon"
-                          className="rounded-full transition-colors"
+                          className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
                           disabled={isLoading || !input.trim()}
                         >
                           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
@@ -672,18 +715,21 @@ const ChatInterface = ({
         )}
       </div>
 
-      {/* Panel de Fuentes */}
+      {/* Panel de fuentes */}
       {showSources && sources.length > 0 && <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />}
 
-      {/* Renderizamos el Sidebar (ya que la conversación inició) */}
+      {/* Renderización del Sidebar */}
       {!isInitialView && (
         <Sidebar
+          isOpen={sidebarOpen}
+          toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          onClose={() => setSidebarOpen(false)}
+          isMobile={isMobile}
           isAuthenticated={isAuthenticated}
           userName={userName}
           onNewChat={onNewChat ? onNewChat : () => { console.log("Nuevo Chat iniciado"); window.location.reload() }}
           onLogout={onLogout}
           onLogin={onLogin}
-          isOpen={sidebarOpen}
         />
       )}
     </div>
