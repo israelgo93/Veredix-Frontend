@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Github, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +32,18 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
 
   return (
     <Card className={cn("w-full max-w-sm", className)} {...props}>
+      {/* Botón para volver al inicio */}
+      <div className="flex justify-end p-2">
+        <Link href="/">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full px-3 py-1 border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 transition-all"
+          >
+            Volver a inicio
+          </Button>
+        </Link>
+      </div>
       <CardHeader className="space-y-1">
         <CardTitle className="text-xl font-bold tracking-tight">Iniciar sesión</CardTitle>
         <CardDescription className="text-sm text-muted-foreground">
@@ -40,7 +52,9 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid gap-2">
-          <Label htmlFor="email" className="text-sm">Correo electrónico</Label>
+          <Label htmlFor="email" className="text-sm">
+            Correo electrónico
+          </Label>
           <Input
             id="email"
             type="email"
@@ -54,14 +68,23 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
         </div>
         <div className="grid gap-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="password" className="text-sm">Contraseña</Label>
-            <Link href="/auth/reset-password" className="text-sm text-muted-foreground hover:text-primary">
+            <Label htmlFor="password" className="text-sm">
+              Contraseña
+            </Label>
+            <Link
+              href="/auth/reset-password"
+              className="text-sm text-muted-foreground hover:text-primary"
+            >
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
           <Input id="password" type="password" disabled={isLoading} className="text-sm" />
         </div>
-        <Button className="w-full" disabled={isLoading}>
+        <Button
+          onClick={onSubmit}
+          disabled={isLoading}
+          className="w-full rounded-full px-4 py-2 text-sm font-medium bg-white text-black border border-gray-300 hover:bg-gray-100 transition-all"
+        >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Iniciar sesión
         </Button>

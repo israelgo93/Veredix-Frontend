@@ -78,7 +78,6 @@
     @apply transform hover:scale-105;
   }
 
-  /* Estilos para enlaces */
   a {
     position: relative;
     overflow: hidden;
@@ -100,61 +99,6 @@
     transform: scaleX(1);
   }
 
-  /* Animación de ondas mejorada */
-  .wave-background {
-    position: absolute;
-    left: 0;
-    right: 0;
-    top: 0;
-    bottom: 0;
-    background: linear-gradient(45deg, rgba(99, 102, 241, 0.15) 0%, rgba(168, 85, 247, 0.15) 100%);
-    overflow: hidden;
-  }
-
-  .wave-background::before,
-  .wave-background::after {
-    content: "";
-    position: absolute;
-    width: 400vw;
-    height: 400vw;
-    top: -65vw;
-    left: 50%;
-    transform-origin: 0 50%;
-    border-radius: 44%;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, rgba(168, 85, 247, 0.1) 100%);
-    animation: drift 20s infinite linear;
-    opacity: 0.5;
-  }
-
-  .wave-background::after {
-    width: 410vw;
-    height: 410vw;
-    top: -70vw;
-    background: radial-gradient(circle, rgba(168, 85, 247, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
-    animation: drift 30s infinite linear;
-    opacity: 0.3;
-  }
-
-  @keyframes drift {
-    from {
-      transform: translate(-50%, 0) rotate(0deg);
-    }
-    to {
-      transform: translate(-50%, 0) rotate(360deg);
-    }
-  }
-
-  /* Ajustes para el tema oscuro */
-  .dark .wave-background {
-    background: linear-gradient(45deg, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
-  }
-
-  .dark .wave-background::before,
-  .dark .wave-background::after {
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.05) 0%, rgba(168, 85, 247, 0.05) 100%);
-  }
-
-  /* Estilos responsivos para tablas */
   .prose table {
     @apply w-full my-4 border-collapse border border-border text-sm overflow-x-auto block md:table;
   }
@@ -168,17 +112,14 @@
     @apply text-left font-bold bg-muted;
   }
 
-  /* Ajustes responsivos para imágenes */
   .prose img {
     @apply max-w-full h-auto mx-auto;
   }
 
-  /* Ajustes responsivos para bloques de código */
   .prose pre {
     @apply overflow-x-auto;
   }
 
-  /* Estilos responsivos para tablas markdown */
   .prose table {
     @apply w-full my-4 border-collapse border border-border text-sm;
     display: block;
@@ -204,7 +145,6 @@
     @apply break-words;
   }
 
-  /* Ajuste para pantallas medianas y grandes */
   @media (min-width: 768px) {
     .prose table {
       display: table;
@@ -215,7 +155,6 @@
     }
   }
 
-  /* Mejoras para la legibilidad en modo oscuro */
   .dark .prose table thead {
     @apply bg-muted/20;
   }
@@ -233,3 +172,4 @@
 .animate-slideIn {
   animation: slideIn 0.3s ease-out;
 }
+

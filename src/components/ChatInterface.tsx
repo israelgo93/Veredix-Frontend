@@ -59,18 +59,11 @@ const markdownStyles = {
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
-const ThinkingIndicator = () => (
+const ThinkingIndicator = ({ isLoading }: { isLoading: boolean }) => (
   <div className="inline-flex items-center gap-2 px-3 py-2">
-    <Loader2 className="h-3 w-3 md:h-4 md:w-4 animate-spin" />
-    <div
-      className="animate-shimmer translate-y-px bg-[length:800%_100%] bg-clip-text text-transparent text-xs md:text-sm"
-      style={{
-        backgroundImage:
-          "linear-gradient(90deg, rgb(161, 161, 170) 0%, rgb(212, 212, 216) 50%, rgb(161, 161, 170) 100%)",
-      }}
-    >
-      Pensando...
-    </div>
+    <span className="align-middle text-sm font-medium animate-pulse bg-gradient-to-r from-gray-400 to-gray-600 bg-clip-text text-transparent">
+      {isLoading ? "Pensando" : "Razonando"}
+    </span>
   </div>
 )
 
@@ -268,10 +261,7 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
     <div className="fixed inset-0 z-[9999] overflow-hidden">
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div
-          ref={drawerRef}
-          className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative"
-        >
+        <div ref={drawerRef} className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative">
           <button
             onClick={onClose}
             className="absolute top-2 right-2 z-[10000] rounded-md p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition-transform duration-200 hover:scale-105 active:scale-95"
@@ -326,15 +316,14 @@ const ChatInterface = ({
   const isMobile = useIsMobile()
   const isScrollingRef = useRef(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [showNewChatModal, setShowNewChatModal] = useState(false)
 
-  // Notificar al layout que se inició la conversación
   useEffect(() => {
     if (!isInitialView) {
       onChatStarted?.()
     }
   }, [isInitialView, onChatStarted])
 
-  // Auto-scroll
   useEffect(() => {
     const container = messagesContainerRef.current
     if (!container) return
@@ -445,11 +434,21 @@ const ChatInterface = ({
     }
   }
 
+  const handleNewChatRequest = () => {
+    if (messages.length > 0) {
+      setShowNewChatModal(true)
+    } else {
+      window.location.reload()
+    }
+  }
+
   return (
-    <div className="flex bg-transparent text-sm overflow-hidden fixed inset-x-0 bottom-0" style={{ top: "64px" }}>
-      {/* En móvil, header fijo con el botón toggle + Toggle Theme (opcional) una vez iniciada la conversación */}
+    <div
+      className="flex bg-white dark:bg-gray-900 text-sm overflow-hidden fixed inset-x-0 bottom-0"
+      style={{ top: "64px" }}
+    >
       {!isInitialView && isMobile && (
-        <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-background shadow-md z-50 justify-between">
+        <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-white dark:bg-gray-900 shadow-md z-50 justify-between">
           <div>
             <Button
               onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -461,15 +460,13 @@ const ChatInterface = ({
               {sidebarOpen ? <ChevronsLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
           </div>
-          {/* Opcional: Toggle Theme en mobile, si hay espacio */}
           <div>
             <ThemeToggle />
           </div>
         </header>
       )}
 
-      {/* Contenedor principal del chat */}
-      <div className="flex-1 flex flex-col transition-all duration-300" style={{ width: "100%" }}>
+      <div className="flex-1 flex flex-col transition-all duration-300 w-full">
         {errorMessage && (
           <div className="max-w-3xl mx-auto px-4 py-2">
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
@@ -481,10 +478,10 @@ const ChatInterface = ({
         {isInitialView ? (
           <div className="flex-1 flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-3xl space-y-6 px-4">
-              <h2 className="text-2xl md:text-3xl font-semibold text-center mb-6 md:mb-8 bg-gradient-to-r from-primary via-primary/80 to-primary/50 bg-clip-text text-transparent">
+              <h2 className="text-2xl md:text-3xl font-semibold text-center mb-6 md:mb-8">
                 ¿En qué puedo ayudarte hoy?
               </h2>
-              <Card className="p-0 shadow-lg mx-auto w-full bg-background/50 backdrop-blur-sm">
+              <Card className="p-0 shadow-lg mx-auto w-full bg-white dark:bg-gray-800 backdrop-blur-sm">
                 <form onSubmit={handleSubmit} className="relative">
                   <div className="flex flex-col p-3 md:p-4">
                     <AutoResizingTextarea
@@ -515,9 +512,9 @@ const ChatInterface = ({
                         type="submit"
                         size="icon"
                         className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                        disabled={!input.trim()}
+                        disabled={isLoading || !input.trim()}
                       >
-                        <ArrowUp className="h-4 w-4" />
+                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                       </Button>
                     </div>
                   </div>
@@ -531,19 +528,18 @@ const ChatInterface = ({
             <div
               ref={messagesContainerRef}
               onScroll={handleScroll}
-              className="relative flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-4 lg:p-6"
+              className="relative flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-4 lg:p-6 bg-white dark:bg-gray-900"
             >
               <div className="max-w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
                 {messages.map((message, index) => {
-                  const showThinking = 
-                    message.role === "assistant" && ((regeneratingIndex === index) || (isLoading && message.content.trim() === ""))
+                  const showThinking =
+                    message.role === "assistant" &&
+                    (regeneratingIndex === index || (isLoading && message.content.trim() === ""))
                   return (
                     <div key={index} className="group flex justify-center">
                       <div className="w-full max-w-full sm:max-w-3xl">
                         <div
-                          className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${
-                            message.role === "user" ? "justify-end" : "justify-start"
-                          }`}
+                          className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                         >
                           {message.role === "assistant" ? (
                             <Avatar className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 border">
@@ -559,19 +555,19 @@ const ChatInterface = ({
                             </Avatar>
                           )}
                           <div
-                            className={`w-full flex flex-col ${
-                              message.role === "user" ? "items-end" : "items-start"
-                            }`}
+                            className={`w-full flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}
                           >
                             <div
-                              className={`w-full max-w-[85%] sm:max-w-[90%] px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 bg-card/30 backdrop-blur-sm flex items-center rounded-lg ${
+                              className={`w-full max-w-[85%] sm:max-w-[90%] px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 ${
                                 message.role === "user"
-                                  ? "text-primary justify-end"
-                                  : "text-foreground justify-start"
+                                  ? "bg-gray-100 dark:bg-gray-800 shadow-sm"
+                                  : "bg-white dark:bg-gray-700"
+                              } backdrop-blur-sm flex items-center rounded-lg ${
+                                message.role === "user" ? "text-primary justify-end" : "text-foreground justify-start"
                               }`}
                             >
-                              {message.role === "assistant" && showThinking ? (
-                                <ThinkingIndicator />
+                              {message.role === "assistant" && (showThinking || isLoading) ? (
+                                <ThinkingIndicator isLoading={isLoading} />
                               ) : (
                                 <div className="prose prose-neutral dark:prose-invert max-w-full overflow-x-hidden text-xs sm:text-sm md:text-base">
                                   <ReactMarkdown
@@ -623,10 +619,7 @@ const ChatInterface = ({
                                       ),
                                       hr: () => <hr className="my-6 border-border" />,
                                       img: (props) => (
-                                        <img
-                                          {...props}
-                                          className="rounded-lg border border-border max-w-full h-auto"
-                                        />
+                                        <img {...props} className="rounded-lg border border-border max-w-full h-auto" />
                                       ),
                                       strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                                       em: ({ children }) => <em className="italic">{children}</em>,
@@ -656,10 +649,9 @@ const ChatInterface = ({
               </div>
             </div>
 
-            {/* Zona de input */}
-            <div className="bg-transparent">
+            <div className="bg-white dark:bg-gray-900">
               <div className="max-w-3xl mx-auto px-3 md:px-4 py-3 md:py-4">
-                <Card className="p-0 shadow-lg mx-auto w-full bg-background/50 backdrop-blur-sm rounded-xl border-0 relative">
+                <Card className="p-0 shadow-lg mx-auto w-full bg-white dark:bg-gray-800 backdrop-blur-sm rounded-xl border-0 relative">
                   <div className="relative flex flex-col gap-2 p-3 md:p-4">
                     {showScrollButton && (
                       <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 z-50">
@@ -715,10 +707,8 @@ const ChatInterface = ({
         )}
       </div>
 
-      {/* Panel de fuentes */}
       {showSources && sources.length > 0 && <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />}
 
-      {/* Renderización del Sidebar */}
       {!isInitialView && (
         <Sidebar
           isOpen={sidebarOpen}
@@ -727,13 +717,47 @@ const ChatInterface = ({
           isMobile={isMobile}
           isAuthenticated={isAuthenticated}
           userName={userName}
-          onNewChat={onNewChat ? onNewChat : () => { console.log("Nuevo Chat iniciado"); window.location.reload() }}
+          onNewChat={handleNewChatRequest}
           onLogout={onLogout}
           onLogin={onLogin}
         />
+      )}
+
+      {showNewChatModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-bold mb-4">¿Quieres borrar el chat actual?</h3>
+            <p className="text-sm mb-6">
+              Tu conversación actual se descartará al iniciar un nuevo chat. Suscríbete o inicia sesión para guardar los
+              chats.
+            </p>
+            <div className="flex flex-col gap-4">
+              <Button
+                onClick={() => window.location.reload()}
+                className="w-full rounded-full px-4 py-2 text-sm font-medium bg-black text-white border border-gray-300 hover:bg-gray-800 transition-all"
+              >
+                Borrar chat
+              </Button>
+              <Button
+                onClick={() => (window.location.href = "/auth/login")}
+                className="w-full rounded-full px-4 py-2 text-sm font-medium bg-white text-black border border-gray-300 hover:bg-gray-100 transition-all"
+              >
+                Iniciar Sesión
+              </Button>
+              <Button
+                onClick={() => setShowNewChatModal(false)}
+                variant="ghost"
+                className="w-full rounded-full border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-all"
+              >
+                Cancelar
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
 export default ChatInterface
+

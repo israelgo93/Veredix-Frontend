@@ -33,6 +33,18 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
 
   return (
     <Card className={cn("w-full max-w-sm", className)} {...props}>
+      {/* Botón para volver al inicio */}
+      <div className="flex justify-end p-2">
+        <Link href="/">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full px-3 py-1 border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 transition-all"
+          >
+            Volver a inicio
+          </Button>
+        </Link>
+      </div>
       <CardHeader className="space-y-1">
         <CardTitle className="text-xl font-bold tracking-tight">Crear cuenta</CardTitle>
         <CardDescription className="text-sm text-muted-foreground">
@@ -41,8 +53,12 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-6">
-          <Button variant="outline" size="sm">
-            <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full px-3 py-1 border border-gray-300"
+          >
+            <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
                 fill="#4285F4"
@@ -62,7 +78,11 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
             </svg>
             Google
           </Button>
-          <Button variant="outline" size="sm">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full px-3 py-1 border border-gray-300"
+          >
             <Github className="mr-2 h-4 w-4" />
             GitHub
           </Button>
@@ -72,17 +92,29 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">O regístrate con</span>
+            <span className="bg-background px-2 text-muted-foreground">
+              O regístrate con
+            </span>
           </div>
         </div>
         <form onSubmit={onSubmit}>
           <div className="grid gap-4">
             <div className="grid gap-2">
-              <Label htmlFor="name" className="text-sm">Nombre completo</Label>
-              <Input id="name" placeholder="Juan Pérez" autoCapitalize="words" disabled={isLoading} className="text-sm" />
+              <Label htmlFor="name" className="text-sm">
+                Nombre completo
+              </Label>
+              <Input
+                id="name"
+                placeholder="Juan Pérez"
+                autoCapitalize="words"
+                disabled={isLoading}
+                className="text-sm"
+              />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="email" className="text-sm">Correo electrónico</Label>
+              <Label htmlFor="email" className="text-sm">
+                Correo electrónico
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -95,10 +127,16 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="password" className="text-sm">Contraseña</Label>
+              <Label htmlFor="password" className="text-sm">
+                Contraseña
+              </Label>
               <Input id="password" type="password" disabled={isLoading} className="text-sm" />
             </div>
-            <Button className="w-full" disabled={isLoading}>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full rounded-full px-4 py-2 text-sm font-medium bg-black text-white border border-gray-300 hover:bg-gray-800 transition-all"
+            >
               {isLoading && <Icons.Spinner className="mr-2 h-4 w-4 animate-spin" />}
               Crear cuenta
             </Button>
