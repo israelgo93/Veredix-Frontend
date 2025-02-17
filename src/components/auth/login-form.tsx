@@ -1,51 +1,37 @@
 //home/phiuser/phi/chat-legal/src/components/auth/login-form.tsx
-"use client";
+"use client"
 
-import * as React from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Loader2 } from "lucide-react";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
+import * as React from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Loader2 } from "lucide-react"
+import Link from "next/link"
+import { cn } from "@/lib/utils"
 
 interface LoginFormProps extends React.HTMLAttributes<HTMLDivElement> {}
 
 export function LoginForm({ className, ...props }: LoginFormProps) {
-  const [isLoading, setIsLoading] = React.useState<boolean>(false);
+  const [isLoading, setIsLoading] = React.useState<boolean>(false)
 
   async function onSubmit(event: React.SyntheticEvent) {
-    event.preventDefault();
-    setIsLoading(true);
+    event.preventDefault()
+    setIsLoading(true)
     setTimeout(() => {
-      setIsLoading(false);
-    }, 3000);
+      setIsLoading(false)
+    }, 3000)
   }
 
   return (
     <Card className={cn("w-full max-w-sm", className)} {...props}>
-      {/* Botón para volver al inicio */}
-      <div className="flex justify-end p-2">
-        <Link href="/">
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full px-3 py-1 border border-gray-300 text-sm text-gray-700 hover:bg-gray-100 transition-all"
-          >
-            Volver a inicio
-          </Button>
+      <div className="absolute top-0 left-0 right-0 p-4 bg-transparent">
+        <Link href="/" className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
+          Veredix
         </Link>
       </div>
       <CardHeader className="space-y-1">
-        <CardTitle className="text-xl font-bold tracking-tight">Iniciar sesión</CardTitle>
+        <CardTitle className="text-xl font-bold tracking-tight">Te damos la bienvenida de nuevo</CardTitle>
         <CardDescription className="text-sm text-muted-foreground">
           Ingresa tus credenciales para acceder a tu cuenta
         </CardDescription>
@@ -71,10 +57,7 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
             <Label htmlFor="password" className="text-sm">
               Contraseña
             </Label>
-            <Link
-              href="/auth/reset-password"
-              className="text-sm text-muted-foreground hover:text-primary"
-            >
+            <Link href="/auth/reset-password" className="text-sm text-muted-foreground hover:text-primary">
               ¿Olvidaste tu contraseña?
             </Link>
           </div>
@@ -98,5 +81,6 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
         </div>
       </CardFooter>
     </Card>
-  );
+  )
 }
+

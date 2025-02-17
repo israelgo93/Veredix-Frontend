@@ -1,9 +1,12 @@
+"use client"
+
 // chat-legal/src/hooks/useChat.ts
 import { useState, useCallback, useRef } from "react"
 
 export interface Message {
   role: "user" | "assistant"
   content: string
+  status?: "thinking" | "responding" | "complete"
 }
 
 export interface ApiResponse {
@@ -15,7 +18,8 @@ export interface ApiResponse {
   extra_data?: {
     references?: any[]
   }
-  session_id?: string  // Campo opcional para recibir el session_id
+  session_id?: string
+  status?: "thinking" | "reasoning" | "completing" // Nuevo campo
 }
 
 export interface Source {
@@ -60,12 +64,8 @@ export function useChat() {
           const jsonString = bufferRef.current.slice(openBraceIndex, endIndex)
           const parsed = JSON.parse(jsonString)
           // Si en la respuesta se incluye extra_data.references, aplanar la estructura
-          if (
-            parsed.extra_data &&
-            parsed.extra_data.references &&
-            Array.isArray(parsed.extra_data.references)
-          ) {
-            let flattenedSources: Source[] = []
+          if (parsed.extra_data && parsed.extra_data.references && Array.isArray(parsed.extra_data.references)) {
+            const flattenedSources: Source[] = []
             parsed.extra_data.references.forEach((refGroup: any) => {
               if (refGroup.references && Array.isArray(refGroup.references)) {
                 flattenedSources.push(...refGroup.references)
@@ -89,49 +89,63 @@ export function useChat() {
     return jsonObjects
   }
 
-  const updateAssistantMessage = useCallback((content: string, isComplete = false) => {
-    setMessages((prev) => {
-      const newMessages = [...prev]
-      const lastMessage = newMessages[newMessages.length - 1]
+  const updateAssistantMessage = useCallback(
+    (
+      content: string,
+      isComplete = false,
+      status: "thinking" | "responding" | "complete" = "responding",
+      regenerate = false,
+    ) => {
+      setMessages((prev) => {
+        const newMessages = [...prev]
+        const lastAssistantIndex = regenerate
+          ? newMessages.findLastIndex((m) => m.role === "assistant")
+          : newMessages.length - 1
 
-      if (lastMessage?.role === "assistant" && lastMessage.content === "Pensando...") {
-        lastMessage.content = content
-        return newMessages
-      }
-
-      if (lastMessage?.role === "assistant" && !isComplete) {
-        lastMessage.content = content
-        return newMessages
-      }
-
-      if (content.trim()) {
-        if (lastMessage?.role !== "assistant") {
-          newMessages.push({ role: "assistant", content })
-        } else {
-          lastMessage.content = content
+        if (lastAssistantIndex !== -1 && newMessages[lastAssistantIndex].role === "assistant") {
+          newMessages[lastAssistantIndex] = {
+            ...newMessages[lastAssistantIndex],
+            content,
+            status,
+          }
+        } else if (!regenerate) {
+          newMessages.push({ role: "assistant", content, status })
         }
-      }
 
-      return newMessages
-    })
-  }, [])
+        return newMessages
+      })
+    },
+    [],
+  )
 
   const sendMessage = useCallback(
-    async (message: string, regenerate: boolean = false) => {
+    async (message: string, regenerate = false) => {
       try {
         setIsLoading(true)
         setCanStopResponse(true)
         if (!regenerate) {
-          setMessages((prev) => [...prev, { role: "user", content: message }])
-          updateAssistantMessage("Pensando...")
+          setMessages((prev) => [
+            ...prev,
+            { role: "user", content: message },
+            { role: "assistant", content: "", status: "thinking" },
+          ])
+        } else {
+          // Para regeneración, actualizar el último mensaje del asistente
+          setMessages((prev) => {
+            const newMessages = [...prev]
+            const lastAssistantIndex = newMessages.findLastIndex((m) => m.role === "assistant")
+            if (lastAssistantIndex !== -1) {
+              newMessages[lastAssistantIndex] = { ...newMessages[lastAssistantIndex], content: "", status: "thinking" }
+            }
+            return newMessages
+          })
         }
 
         const formData = new FormData()
         formData.append("message", message)
         formData.append("stream", "true")
         formData.append("monitor", "true")
-        // Recupera el session_id almacenado en sessionStorage (si existe)
-        const storedSessionId = sessionStorage.getItem('session_id') || ""
+        const storedSessionId = sessionStorage.getItem("session_id") || ""
         formData.append("session_id", storedSessionId)
         formData.append("user_id", "ijgc93_0ec5")
 
@@ -158,35 +172,39 @@ export function useChat() {
           const jsonObjects = processJsonObjects(chunk)
 
           for (const parsedData of jsonObjects) {
-            // Si se recibe un session_id y aún no se ha almacenado, se guarda en sessionStorage
-            if (parsedData.session_id && !sessionStorage.getItem('session_id')) {
-              sessionStorage.setItem('session_id', parsedData.session_id)
+            if (parsedData.session_id && !sessionStorage.getItem("session_id")) {
+              sessionStorage.setItem("session_id", parsedData.session_id)
             }
 
             if (parsedData.event === "RunResponse" && parsedData.content) {
               currentContentRef.current += parsedData.content
-              updateAssistantMessage(currentContentRef.current)
+              updateAssistantMessage(currentContentRef.current, false, "responding", regenerate)
             } else if (parsedData.event === "RunCompleted") {
               if (parsedData.content) {
                 currentContentRef.current = parsedData.content
               }
-              updateAssistantMessage(currentContentRef.current, true)
+              updateAssistantMessage(currentContentRef.current, true, "complete", regenerate)
             }
           }
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
-          updateAssistantMessage(currentContentRef.current + "\n\n[Mensaje interrumpido por el usuario]", true)
+          updateAssistantMessage(
+            currentContentRef.current + "\n\n[Mensaje interrumpido por el usuario]",
+            true,
+            "complete",
+            regenerate,
+          )
         } else {
           console.error("Error:", error)
-          updateAssistantMessage("Error al procesar el mensaje", true)
+          updateAssistantMessage("Error al procesar el mensaje", true, "complete", regenerate)
         }
       } finally {
         setIsLoading(false)
         setCanStopResponse(false)
       }
     },
-    [updateAssistantMessage]
+    [updateAssistantMessage], // Removed processJsonObjects from dependency array
   )
 
   const cancelRequest = useCallback(() => {
@@ -204,3 +222,4 @@ export function useChat() {
     sources,
   }
 }
+

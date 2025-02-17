@@ -1,4 +1,4 @@
-// chat-legal/src/components/ChatInterface.tsx
+// chat-legal/src/components/ChatInterfaceV2.tsx
 "use client"
 
 import { useState, useEffect, useRef, useCallback, type FormEvent, type KeyboardEvent, type ChangeEvent } from "react"
@@ -30,7 +30,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { QuickActions } from "./QuickActions"
 import { Sidebar } from "./Sidebar"
-import { ThemeToggle } from "./theme-toggle"
+import Link from "next/link"
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -59,10 +59,10 @@ const markdownStyles = {
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
-const ThinkingIndicator = ({ isLoading }: { isLoading: boolean }) => (
+const ThinkingIndicator = () => (
   <div className="inline-flex items-center gap-2 px-3 py-2">
     <span className="align-middle text-sm font-medium animate-pulse bg-gradient-to-r from-gray-400 to-gray-600 bg-clip-text text-transparent">
-      {isLoading ? "Pensando" : "Razonando"}
+      Pensando
     </span>
   </div>
 )
@@ -317,6 +317,13 @@ const ChatInterface = ({
   const isScrollingRef = useRef(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
+  const [chatStarted, setChatStarted] = useState(false)
+
+  useEffect(() => {
+    if (!isInitialView) {
+      setChatStarted(true)
+    }
+  }, [isInitialView])
 
   useEffect(() => {
     if (!isInitialView) {
@@ -444,9 +451,16 @@ const ChatInterface = ({
 
   return (
     <div
-      className="flex bg-white dark:bg-gray-900 text-sm overflow-hidden fixed inset-x-0 bottom-0"
+      className={`flex bg-white dark:bg-gray-900 text-sm overflow-hidden fixed inset-x-0 bottom-0 ${
+        chatStarted ? "bg-transparent" : ""
+      }`}
       style={{ top: "64px" }}
     >
+      {!chatStarted && (
+        <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-gray-950">
+          <div className="absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+        </div>
+      )}
       {!isInitialView && isMobile && (
         <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-white dark:bg-gray-900 shadow-md z-50 justify-between">
           <div>
@@ -461,7 +475,15 @@ const ChatInterface = ({
             </Button>
           </div>
           <div>
-            <ThemeToggle />
+            <Link href="/auth/login">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full px-3 py-1 bg-white text-black dark:bg-gray-800 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+              >
+                Iniciar Sesión
+              </Button>
+            </Link>
           </div>
         </header>
       )}
@@ -566,8 +588,8 @@ const ChatInterface = ({
                                 message.role === "user" ? "text-primary justify-end" : "text-foreground justify-start"
                               }`}
                             >
-                              {message.role === "assistant" && (showThinking || isLoading) ? (
-                                <ThinkingIndicator isLoading={isLoading} />
+                              {message.role === "assistant" && showThinking ? (
+                                <ThinkingIndicator />
                               ) : (
                                 <div className="prose prose-neutral dark:prose-invert max-w-full overflow-x-hidden text-xs sm:text-sm md:text-base">
                                   <ReactMarkdown

@@ -1,40 +1,38 @@
 //home/phiuser/phi/chat-legal/src/components/auth/signup-form.tsx
-"use client";
+"use client"
 
-import * as React from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  CardFooter,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Github } from "lucide-react";
-import Link from "next/link";
-import { cn } from "@/lib/utils";
-import * as Icons from "lucide-react";
+import * as React from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Github } from "lucide-react"
+import Link from "next/link"
+import { cn } from "@/lib/utils"
+import * as Icons from "lucide-react"
 
 interface SignUpFormProps extends React.HTMLAttributes<HTMLDivElement> {}
 
 export function SignUpForm({ className, ...props }: SignUpFormProps) {
-  const [isLoading, setIsLoading] = React.useState<boolean>(false);
+  const [isLoading, setIsLoading] = React.useState<boolean>(false)
 
   async function onSubmit(event: React.SyntheticEvent) {
-    event.preventDefault();
-    setIsLoading(true);
+    event.preventDefault()
+    setIsLoading(true)
     setTimeout(() => {
-      setIsLoading(false);
-    }, 3000);
+      setIsLoading(false)
+    }, 3000)
   }
 
   return (
     <Card className={cn("w-full max-w-sm", className)} {...props}>
+      <div className="absolute top-0 left-0 right-0 p-4 bg-transparent">
+        <Link href="/" className="text-2xl font-bold text-primary hover:text-primary/80 transition-colors">
+          Veredix
+        </Link>
+      </div>
       {/* Botón para volver al inicio */}
-      <div className="flex justify-end p-2">
+      {/* <div className="flex justify-end p-2">
         <Link href="/">
           <Button
             variant="outline"
@@ -44,7 +42,7 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
             Volver a inicio
           </Button>
         </Link>
-      </div>
+      </div> */}
       <CardHeader className="space-y-1">
         <CardTitle className="text-xl font-bold tracking-tight">Crear cuenta</CardTitle>
         <CardDescription className="text-sm text-muted-foreground">
@@ -53,11 +51,7 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
       </CardHeader>
       <CardContent className="grid gap-4">
         <div className="grid grid-cols-2 gap-6">
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full px-3 py-1 border border-gray-300"
-          >
+          <Button variant="outline" size="sm" className="rounded-full px-3 py-1 border border-gray-300">
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path
                 d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -78,11 +72,7 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
             </svg>
             Google
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full px-3 py-1 border border-gray-300"
-          >
+          <Button variant="outline" size="sm" className="rounded-full px-3 py-1 border border-gray-300">
             <Github className="mr-2 h-4 w-4" />
             GitHub
           </Button>
@@ -92,9 +82,7 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
             <span className="w-full border-t" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="bg-background px-2 text-muted-foreground">
-              O regístrate con
-            </span>
+            <span className="bg-background px-2 text-muted-foreground">O regístrate con</span>
           </div>
         </div>
         <form onSubmit={onSubmit}>
@@ -152,5 +140,6 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
         </div>
       </CardFooter>
     </Card>
-  );
+  )
 }
+

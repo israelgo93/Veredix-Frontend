@@ -50,7 +50,7 @@ export default function ClientLayout({
             </div>
 
             {/* Derecha: botones (solo en escritorio) */}
-            <div className="hidden md:flex items-center space-x-2">
+            <div className={isMobile ? "flex items-center space-x-2" : "hidden md:flex items-center space-x-2"}>
               {!isAuthenticated ? (
                 <>
                   <Link href="/auth/login">
@@ -96,7 +96,15 @@ export default function ClientLayout({
         <footer className="border-t py-6 md:py-0 bg-white dark:bg-gray-900">
           <div className="container flex flex-col items-center justify-between gap-4 md:h-14 md:flex-row">
             <p className="text-center text-sm leading-loose text-muted-foreground">
-              Desarrollado con <span className="font-semibold">Tecnología Avanzada</span>
+              Al enviar un mensaje a Veredix, aceptas nuestras{" "}
+              <a href="/condiciones" className="underline underline-offset-4 hover:text-primary">
+                condiciones
+              </a>{" "}
+              y confirmas que has leído nuestra{" "}
+              <a href="/privacidad" className="underline underline-offset-4 hover:text-primary">
+                política de privacidad
+              </a>
+              .
             </p>
           </div>
         </footer>
