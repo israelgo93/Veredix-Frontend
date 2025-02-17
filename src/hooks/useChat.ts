@@ -1,7 +1,9 @@
 "use client"
 
-// chat-legal/src/hooks/useChat.ts
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
+import { createUserSession } from "../lib/supabaseUtils"
+import { supabase } from "../lib/supabase"
+import { getUserId } from "@/lib/utils"
 
 export interface Message {
   role: "user" | "assistant"
@@ -19,7 +21,7 @@ export interface ApiResponse {
     references?: any[]
   }
   session_id?: string
-  status?: "thinking" | "reasoning" | "completing" // Nuevo campo
+  status?: "thinking" | "reasoning" | "completing"
 }
 
 export interface Source {
@@ -32,16 +34,106 @@ export interface Source {
   content: string
 }
 
+interface UserSession {
+  id: string
+  user_id: string
+  session_id: string
+  agent_id: string
+  title: string
+  created_at: string
+}
+
+const fetchUserSessions = async (userId: string) => {
+  if (!userId) return []
+  try {
+    const response = await fetch(
+      `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions?user_id=${userId}`,
+    )
+    if (!response.ok) {
+      throw new Error("Failed to fetch user sessions")
+    }
+    const sessions = await response.json()
+    return sessions
+  } catch (error) {
+    console.error("Error fetching user sessions:", error)
+    return []
+  }
+}
+
 export function useChat() {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [canStopResponse, setCanStopResponse] = useState(false)
   const [sources, setSources] = useState<Source[]>([])
+  const [userSessions, setUserSessions] = useState<UserSession[]>([])
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentContentRef = useRef<string>("")
   const bufferRef = useRef<string>("")
 
-  const processJsonObjects = (text: string): ApiResponse[] => {
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (session?.user) {
+          console.log("Authenticated user:", session.user.id)
+          setCurrentUserId(session.user.id)
+          const storedSessionId = localStorage.getItem("currentSessionId")
+          if (storedSessionId) {
+            setCurrentSessionId(storedSessionId)
+          }
+        } else {
+          const userId = getUserId()
+          console.log("Non-authenticated user:", userId)
+          setCurrentUserId(userId)
+        }
+      } catch (error) {
+        console.error("Error checking session:", error)
+        const userId = getUserId()
+        console.log("Fallback to non-authenticated user:", userId)
+        setCurrentUserId(userId)
+      }
+    }
+
+    checkSession()
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("Auth state changed:", event)
+      if (event === "SIGNED_IN") {
+        const userId = session?.user.id
+        if (userId) {
+          console.log("User signed in:", userId)
+          setCurrentUserId(userId)
+          const sessions = await fetchUserSessions(userId)
+          setUserSessions(sessions)
+        }
+      } else if (event === "SIGNED_OUT") {
+        const anonymousId = getUserId()
+        console.log("User signed out, using anonymous ID:", anonymousId)
+        setCurrentUserId(anonymousId)
+        setUserSessions([])
+        localStorage.removeItem("currentSessionId")
+      }
+    })
+
+    return () => {
+      authListener.subscription.unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (currentUserId) {
+      fetchUserSessions(currentUserId).then((sessions) => {
+        setUserSessions(sessions)
+      })
+    }
+  }, [currentUserId])
+
+  const processJsonObjects = useCallback((text: string): ApiResponse[] => {
     const jsonObjects: ApiResponse[] = []
     bufferRef.current += text
 
@@ -63,7 +155,6 @@ export function useChat() {
         try {
           const jsonString = bufferRef.current.slice(openBraceIndex, endIndex)
           const parsed = JSON.parse(jsonString)
-          // Si en la respuesta se incluye extra_data.references, aplanar la estructura
           if (parsed.extra_data && parsed.extra_data.references && Array.isArray(parsed.extra_data.references)) {
             const flattenedSources: Source[] = []
             parsed.extra_data.references.forEach((refGroup: any) => {
@@ -87,7 +178,7 @@ export function useChat() {
 
     bufferRef.current = bufferRef.current.slice(startIndex)
     return jsonObjects
-  }
+  }, [])
 
   const updateAssistantMessage = useCallback(
     (
@@ -118,6 +209,39 @@ export function useChat() {
     [],
   )
 
+  const loadSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(
+        `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${sessionId}?user_id=${currentUserId}`,
+      )
+
+      if (!response.ok) {
+        throw new Error("Failed to load session")
+      }
+
+      const sessionData = await response.json()
+
+      // Convert the session messages to our Message format
+      const chatMessages: Message[] = []
+      sessionData.memory.messages.forEach((msg: any) => {
+        if (msg.role !== "system") {
+          chatMessages.push({
+            role: msg.role,
+            content: msg.content,
+            status: "complete",
+          })
+        }
+      })
+
+      setMessages(chatMessages)
+      setCurrentSessionId(sessionId)
+      localStorage.setItem("currentSessionId", sessionId)
+    } catch (error) {
+      console.error("Error loading session:", error)
+      throw error
+    }
+  }
+
   const sendMessage = useCallback(
     async (message: string, regenerate = false) => {
       try {
@@ -130,7 +254,6 @@ export function useChat() {
             { role: "assistant", content: "", status: "thinking" },
           ])
         } else {
-          // Para regeneración, actualizar el último mensaje del asistente
           setMessages((prev) => {
             const newMessages = [...prev]
             const lastAssistantIndex = newMessages.findLastIndex((m) => m.role === "assistant")
@@ -145,24 +268,34 @@ export function useChat() {
         formData.append("message", message)
         formData.append("stream", "true")
         formData.append("monitor", "true")
-        const storedSessionId = sessionStorage.getItem("session_id") || ""
-        formData.append("session_id", storedSessionId)
-        formData.append("user_id", "ijgc93_0ec5")
+        formData.append("session_id", currentSessionId || "")
+        formData.append("user_id", currentUserId || getUserId())
 
         abortControllerRef.current = new AbortController()
 
-        const response = await fetch("http://52.180.148.75:7777/v1/playground/agents/veredix/runs", {
-          method: "POST",
-          body: formData,
-          signal: abortControllerRef.current.signal,
-        })
+        const response = await fetch(
+          "http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/runs",
+          {
+            method: "POST",
+            body: formData,
+            signal: abortControllerRef.current.signal,
+          },
+        )
 
-        if (!response.ok) throw new Error("Network response was not ok")
-        if (!response.body) throw new Error("No response body")
+        if (!response.ok) {
+          console.error("API response not ok:", response.status, response.statusText)
+          throw new Error("Network response was not ok")
+        }
+        if (!response.body) {
+          console.error("API response body is null")
+          throw new Error("No response body")
+        }
 
         const reader = response.body.getReader()
         currentContentRef.current = ""
         bufferRef.current = ""
+
+        let sessionId = ""
 
         while (true) {
           const { done, value } = await reader.read()
@@ -172,8 +305,10 @@ export function useChat() {
           const jsonObjects = processJsonObjects(chunk)
 
           for (const parsedData of jsonObjects) {
-            if (parsedData.session_id && !sessionStorage.getItem("session_id")) {
-              sessionStorage.setItem("session_id", parsedData.session_id)
+            if (parsedData.session_id && !currentSessionId) {
+              sessionId = parsedData.session_id
+              setCurrentSessionId(sessionId)
+              localStorage.setItem("currentSessionId", sessionId)
             }
 
             if (parsedData.event === "RunResponse" && parsedData.content) {
@@ -187,8 +322,19 @@ export function useChat() {
             }
           }
         }
+
+        // Create user session in Supabase only for authenticated users
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (session?.user && sessionId && !currentSessionId) {
+          await createUserSession(session.user.id, sessionId, "veredix", message)
+          const sessions = await fetchUserSessions(session.user.id)
+          setUserSessions(sessions)
+        }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
+          console.log("Request aborted by user")
           updateAssistantMessage(
             currentContentRef.current + "\n\n[Mensaje interrumpido por el usuario]",
             true,
@@ -196,7 +342,7 @@ export function useChat() {
             regenerate,
           )
         } else {
-          console.error("Error:", error)
+          console.error("Error in sendMessage:", error)
           updateAssistantMessage("Error al procesar el mensaje", true, "complete", regenerate)
         }
       } finally {
@@ -204,7 +350,7 @@ export function useChat() {
         setCanStopResponse(false)
       }
     },
-    [updateAssistantMessage], // Removed processJsonObjects from dependency array
+    [currentUserId, currentSessionId, processJsonObjects, updateAssistantMessage],
   )
 
   const cancelRequest = useCallback(() => {
@@ -213,6 +359,57 @@ export function useChat() {
     }
   }, [])
 
+  const deleteSession = async (sessionId: string) => {
+    if (currentUserId) {
+      try {
+        const response = await fetch(
+          `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${sessionId}?user_id=${currentUserId}`,
+          {
+            method: "DELETE",
+          },
+        )
+        if (!response.ok) {
+          throw new Error("Failed to delete session")
+        }
+        const sessions = await fetchUserSessions(currentUserId)
+        setUserSessions(sessions)
+        if (sessionId === currentSessionId) {
+          setCurrentSessionId(null)
+          localStorage.removeItem("currentSessionId")
+        }
+      } catch (error) {
+        console.error("Error deleting session:", error)
+      }
+    }
+  }
+
+  const renameSession = async (sessionId: string, newTitle: string) => {
+    if (currentUserId) {
+      try {
+        const response = await fetch(
+          `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${sessionId}/rename`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              name: newTitle,
+              user_id: currentUserId,
+            }),
+          },
+        )
+        if (!response.ok) {
+          throw new Error("Failed to rename session")
+        }
+        const sessions = await fetchUserSessions(currentUserId)
+        setUserSessions(sessions)
+      } catch (error) {
+        console.error("Error renaming session:", error)
+      }
+    }
+  }
+
   return {
     messages,
     sendMessage,
@@ -220,6 +417,12 @@ export function useChat() {
     cancelRequest,
     canStopResponse,
     sources,
+    userSessions,
+    deleteSession,
+    renameSession,
+    currentUserId,
+    currentSessionId,
+    loadSession,
   }
 }
 

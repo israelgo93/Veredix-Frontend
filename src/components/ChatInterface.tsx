@@ -1,4 +1,3 @@
-// chat-legal/src/components/ChatInterfaceV2.tsx
 "use client"
 
 import { useState, useEffect, useRef, useCallback, type FormEvent, type KeyboardEvent, type ChangeEvent } from "react"
@@ -19,6 +18,8 @@ import {
   Menu,
   ChevronsLeft,
   ChevronsRight,
+  Edit,
+  Trash2,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -294,15 +295,26 @@ interface ChatInterfaceProps {
   onLogin?: () => void
 }
 
-const ChatInterface = ({
+export default function ChatInterface({
   onChatStarted,
   onNewChat,
   isAuthenticated = false,
   userName = "",
   onLogout,
   onLogin,
-}: ChatInterfaceProps) => {
-  const { messages, sendMessage, isLoading, sources } = useChat()
+}: ChatInterfaceProps) {
+  const {
+    messages,
+    sendMessage,
+    isLoading,
+    sources,
+    userSessions,
+    deleteSession,
+    renameSession,
+    currentUserId,
+    currentSessionId,
+    loadSession,
+  } = useChat()
   const { theme } = useTheme()
   const [isInitialView, setIsInitialView] = useState(true)
   const [input, setInput] = useState("")
@@ -318,15 +330,20 @@ const ChatInterface = ({
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
   const [chatStarted, setChatStarted] = useState(false)
+  const [selectedSession, setSelectedSession] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isInitialView) {
-      setChatStarted(true)
+    console.log("ChatInterface mounted")
+    return () => {
+      console.log("ChatInterface unmounted")
     }
-  }, [isInitialView])
+  }, [])
 
   useEffect(() => {
     if (!isInitialView) {
+      console.log("Chat started")
+      setChatStarted(true)
       onChatStarted?.()
     }
   }, [isInitialView, onChatStarted])
@@ -403,9 +420,10 @@ const ChatInterface = ({
     setIsInitialView(false)
     setErrorMessage(null)
     try {
+      console.log("Sending message:", message)
       await sendMessage(message)
     } catch (error) {
-      console.error("Error details:", error)
+      console.error("Error sending message:", error)
       setErrorMessage(`Error al enviar el mensaje: ${error instanceof Error ? error.message : JSON.stringify(error)}`)
     } finally {
       setTimeout(scrollToBottom, 100)
@@ -442,12 +460,36 @@ const ChatInterface = ({
   }
 
   const handleNewChatRequest = () => {
-    if (messages.length > 0) {
+    if (isAuthenticated) {
+      window.location.reload()
+    } else if (messages.length > 0) {
       setShowNewChatModal(true)
     } else {
       window.location.reload()
     }
   }
+
+  const handleSessionSelect = async (sessionId: string) => {
+    try {
+      await loadSession(sessionId)
+      setIsInitialView(false)
+    } catch (error) {
+      console.error("Error loading session:", error)
+      setErrorMessage("Error loading chat history")
+    }
+  }
+
+  const handleSessionDelete = async (sessionId: string) => {
+    await deleteSession(sessionId)
+  }
+
+  const handleSessionRename = async (sessionId: string, newTitle: string) => {
+    await renameSession(sessionId, newTitle)
+  }
+
+  useEffect(() => {
+    //This effect is now empty because session loading is handled in handleSessionSelect
+  }, [])
 
   return (
     <div
@@ -494,6 +536,11 @@ const ChatInterface = ({
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
               <span className="block sm:inline">{errorMessage}</span>
             </div>
+          </div>
+        )}
+        {sessionError && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
+            <span className="block sm:inline">{sessionError}</span>
           </div>
         )}
 
@@ -717,7 +764,11 @@ const ChatInterface = ({
                           className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
                           disabled={isLoading || !input.trim()}
                         >
-                          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                          {isLoading ? (
+                            <Loader2 className="                          h-4 w-4 animate-spin" />
+                          ) : (
+                            <ArrowUp className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </form>
@@ -727,6 +778,39 @@ const ChatInterface = ({
             </div>
           </>
         )}
+        {isAuthenticated && (
+          <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4">
+            <h2 className="text-lg font-semibold mb-2">Your Sessions</h2>
+            <div className="space-y-2">
+              {userSessions.map((session) => (
+                <div key={session.id} className="flex items-center justify-between">
+                  <button
+                    onClick={() => handleSessionSelect(session.session_id)}
+                    className={`text-left ${selectedSession === session.session_id ? "font-bold" : ""}`}
+                  >
+                    {session.title}
+                  </button>
+                  <div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        handleSessionRename(session.session_id, prompt("Enter new title") || session.title)
+                      }
+                    >
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleSessionDelete(session.session_id)}>
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ... (keep existing code) */}
       </div>
 
       {showSources && sources.length > 0 && <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />}
@@ -742,10 +826,15 @@ const ChatInterface = ({
           onNewChat={handleNewChatRequest}
           onLogout={onLogout}
           onLogin={onLogin}
+          sessions={userSessions}
+          onSessionSelect={handleSessionSelect}
+          onSessionDelete={deleteSession}
+          onSessionRename={renameSession}
+          currentSessionId={currentSessionId}
         />
       )}
 
-      {showNewChatModal && (
+      {showNewChatModal && !isAuthenticated && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold mb-4">¿Quieres borrar el chat actual?</h3>
@@ -780,6 +869,4 @@ const ChatInterface = ({
     </div>
   )
 }
-
-export default ChatInterface
 
