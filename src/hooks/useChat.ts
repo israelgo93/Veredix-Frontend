@@ -3,7 +3,8 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { createUserSession } from "../lib/supabaseUtils"
 import { supabase } from "../lib/supabase"
-import { getUserId } from "@/lib/utils"
+import { getUserId } from "../lib/utils"
+import { v4 as uuidv4 } from "uuid"
 
 export interface Message {
   role: "user" | "assistant"
@@ -67,7 +68,8 @@ export function useChat() {
   const [sources, setSources] = useState<Source[]>([])
   const [userSessions, setUserSessions] = useState<UserSession[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null)
+  const [authSession, setAuthSession] = useState<any>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentContentRef = useRef<string>("")
@@ -82,9 +84,10 @@ export function useChat() {
         if (session?.user) {
           console.log("Authenticated user:", session.user.id)
           setCurrentUserId(session.user.id)
-          const storedSessionId = localStorage.getItem("currentSessionId")
-          if (storedSessionId) {
-            setCurrentSessionId(storedSessionId)
+          setAuthSession(session)
+          const storedChatId = localStorage.getItem("currentChatId")
+          if (storedChatId) {
+            setCurrentChatId(storedChatId)
           }
         } else {
           const userId = getUserId()
@@ -108,6 +111,7 @@ export function useChat() {
         if (userId) {
           console.log("User signed in:", userId)
           setCurrentUserId(userId)
+          setAuthSession(session)
           const sessions = await fetchUserSessions(userId)
           setUserSessions(sessions)
         }
@@ -115,8 +119,9 @@ export function useChat() {
         const anonymousId = getUserId()
         console.log("User signed out, using anonymous ID:", anonymousId)
         setCurrentUserId(anonymousId)
+        setAuthSession(null)
         setUserSessions([])
-        localStorage.removeItem("currentSessionId")
+        localStorage.removeItem("currentChatId")
       }
     })
 
@@ -124,6 +129,31 @@ export function useChat() {
       authListener.subscription.unsubscribe()
     }
   }, [])
+
+  // Create a new chat session
+  const createNewChat = useCallback(async () => {
+    if (authSession?.user) {
+      const chatId = uuidv4() // Generate a unique ID for the chat session
+      const initialTitle = "Nueva conversación"
+
+      try {
+        const newSession = await createUserSession(authSession.user.id, chatId, "veredix", initialTitle)
+
+        if (newSession) {
+          setCurrentChatId(chatId)
+          localStorage.setItem("currentChatId", chatId)
+
+          // Update the sessions list
+          const sessions = await fetchUserSessions(authSession.user.id)
+          setUserSessions(sessions)
+        } else {
+          console.error("Failed to create new chat session")
+        }
+      } catch (error) {
+        console.error("Error creating new chat session:", error)
+      }
+    }
+  }, [authSession])
 
   useEffect(() => {
     if (currentUserId) {
@@ -209,10 +239,10 @@ export function useChat() {
     [],
   )
 
-  const loadSession = async (sessionId: string) => {
+  const loadSession = async (chatId: string) => {
     try {
       const response = await fetch(
-        `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${sessionId}?user_id=${currentUserId}`,
+        `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${chatId}?user_id=${currentUserId}`,
       )
 
       if (!response.ok) {
@@ -221,7 +251,6 @@ export function useChat() {
 
       const sessionData = await response.json()
 
-      // Convert the session messages to our Message format
       const chatMessages: Message[] = []
       sessionData.memory.messages.forEach((msg: any) => {
         if (msg.role !== "system") {
@@ -234,8 +263,8 @@ export function useChat() {
       })
 
       setMessages(chatMessages)
-      setCurrentSessionId(sessionId)
-      localStorage.setItem("currentSessionId", sessionId)
+      setCurrentChatId(chatId)
+      localStorage.setItem("currentChatId", chatId)
     } catch (error) {
       console.error("Error loading session:", error)
       throw error
@@ -247,6 +276,13 @@ export function useChat() {
       try {
         setIsLoading(true)
         setCanStopResponse(true)
+
+        // Create a new chat session if authenticated user doesn't have one
+        if (authSession?.user && !currentChatId) {
+          await createNewChat()
+        }
+
+        // Update messages state
         if (!regenerate) {
           setMessages((prev) => [
             ...prev,
@@ -268,7 +304,7 @@ export function useChat() {
         formData.append("message", message)
         formData.append("stream", "true")
         formData.append("monitor", "true")
-        formData.append("session_id", currentSessionId || "")
+        formData.append("chat_id", currentChatId || "")
         formData.append("user_id", currentUserId || getUserId())
 
         abortControllerRef.current = new AbortController()
@@ -283,19 +319,16 @@ export function useChat() {
         )
 
         if (!response.ok) {
-          console.error("API response not ok:", response.status, response.statusText)
           throw new Error("Network response was not ok")
         }
-        if (!response.body) {
-          console.error("API response body is null")
+
+        const reader = response.body?.getReader()
+        if (!reader) {
           throw new Error("No response body")
         }
 
-        const reader = response.body.getReader()
         currentContentRef.current = ""
         bufferRef.current = ""
-
-        let sessionId = ""
 
         while (true) {
           const { done, value } = await reader.read()
@@ -305,12 +338,6 @@ export function useChat() {
           const jsonObjects = processJsonObjects(chunk)
 
           for (const parsedData of jsonObjects) {
-            if (parsedData.session_id && !currentSessionId) {
-              sessionId = parsedData.session_id
-              setCurrentSessionId(sessionId)
-              localStorage.setItem("currentSessionId", sessionId)
-            }
-
             if (parsedData.event === "RunResponse" && parsedData.content) {
               currentContentRef.current += parsedData.content
               updateAssistantMessage(currentContentRef.current, false, "responding", regenerate)
@@ -321,16 +348,6 @@ export function useChat() {
               updateAssistantMessage(currentContentRef.current, true, "complete", regenerate)
             }
           }
-        }
-
-        // Create user session in Supabase only for authenticated users
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (session?.user && sessionId && !currentSessionId) {
-          await createUserSession(session.user.id, sessionId, "veredix", message)
-          const sessions = await fetchUserSessions(session.user.id)
-          setUserSessions(sessions)
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
@@ -350,7 +367,7 @@ export function useChat() {
         setCanStopResponse(false)
       }
     },
-    [currentUserId, currentSessionId, processJsonObjects, updateAssistantMessage],
+    [currentUserId, currentChatId, authSession, createNewChat, processJsonObjects, updateAssistantMessage],
   )
 
   const cancelRequest = useCallback(() => {
@@ -373,9 +390,9 @@ export function useChat() {
         }
         const sessions = await fetchUserSessions(currentUserId)
         setUserSessions(sessions)
-        if (sessionId === currentSessionId) {
-          setCurrentSessionId(null)
-          localStorage.removeItem("currentSessionId")
+        if (sessionId === currentChatId) {
+          setCurrentChatId(null)
+          localStorage.removeItem("currentChatId")
         }
       } catch (error) {
         console.error("Error deleting session:", error)
@@ -412,6 +429,7 @@ export function useChat() {
 
   return {
     messages,
+    setMessages, // Add this line
     sendMessage,
     isLoading,
     cancelRequest,
@@ -421,8 +439,10 @@ export function useChat() {
     deleteSession,
     renameSession,
     currentUserId,
-    currentSessionId,
+    currentChatId,
     loadSession,
+    createNewChat,
   }
 }
+
 

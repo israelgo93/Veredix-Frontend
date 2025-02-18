@@ -18,8 +18,6 @@ import {
   Menu,
   ChevronsLeft,
   ChevronsRight,
-  Edit,
-  Trash2,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -32,6 +30,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { QuickActions } from "./QuickActions"
 import { Sidebar } from "./Sidebar"
 import Link from "next/link"
+import { useAuth } from "../contexts/AuthContext"
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -289,22 +288,12 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
 interface ChatInterfaceProps {
   onChatStarted?: () => void
   onNewChat?: () => void
-  isAuthenticated?: boolean
-  userName?: string
-  onLogout?: () => void
-  onLogin?: () => void
 }
 
-export default function ChatInterface({
-  onChatStarted,
-  onNewChat,
-  isAuthenticated = false,
-  userName = "",
-  onLogout,
-  onLogin,
-}: ChatInterfaceProps) {
+export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfaceProps) {
   const {
     messages,
+    setMessages,
     sendMessage,
     isLoading,
     sources,
@@ -312,10 +301,13 @@ export default function ChatInterface({
     deleteSession,
     renameSession,
     currentUserId,
-    currentSessionId,
+    currentChatId,
     loadSession,
+    createNewChat,
+    clearCurrentChat,
   } = useChat()
   const { theme } = useTheme()
+  const { isAuthenticated, user, logout } = useAuth()
   const [isInitialView, setIsInitialView] = useState(true)
   const [input, setInput] = useState("")
   const [showSources, setShowSources] = useState(false)
@@ -459,13 +451,15 @@ export default function ChatInterface({
     }
   }
 
-  const handleNewChatRequest = () => {
+  const handleNewChatRequest = async () => {
     if (isAuthenticated) {
-      window.location.reload()
+      await createNewChat()
+      setIsInitialView(true)
     } else if (messages.length > 0) {
       setShowNewChatModal(true)
     } else {
-      window.location.reload()
+      clearCurrentChat()
+      setIsInitialView(true)
     }
   }
 
@@ -487,9 +481,7 @@ export default function ChatInterface({
     await renameSession(sessionId, newTitle)
   }
 
-  useEffect(() => {
-    //This effect is now empty because session loading is handled in handleSessionSelect
-  }, [])
+  useEffect(() => {}, [])
 
   return (
     <div
@@ -764,11 +756,7 @@ export default function ChatInterface({
                           className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
                           disabled={isLoading || !input.trim()}
                         >
-                          {isLoading ? (
-                            <Loader2 className="                          h-4 w-4 animate-spin" />
-                          ) : (
-                            <ArrowUp className="h-4 w-4" />
-                          )}
+                          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                         </Button>
                       </div>
                     </form>
@@ -778,39 +766,6 @@ export default function ChatInterface({
             </div>
           </>
         )}
-        {isAuthenticated && (
-          <div className="bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-4">
-            <h2 className="text-lg font-semibold mb-2">Your Sessions</h2>
-            <div className="space-y-2">
-              {userSessions.map((session) => (
-                <div key={session.id} className="flex items-center justify-between">
-                  <button
-                    onClick={() => handleSessionSelect(session.session_id)}
-                    className={`text-left ${selectedSession === session.session_id ? "font-bold" : ""}`}
-                  >
-                    {session.title}
-                  </button>
-                  <div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        handleSessionRename(session.session_id, prompt("Enter new title") || session.title)
-                      }
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleSessionDelete(session.session_id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* ... (keep existing code) */}
       </div>
 
       {showSources && sources.length > 0 && <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />}
@@ -822,15 +777,15 @@ export default function ChatInterface({
           onClose={() => setSidebarOpen(false)}
           isMobile={isMobile}
           isAuthenticated={isAuthenticated}
-          userName={userName}
+          userName={user?.email || ""}
           onNewChat={handleNewChatRequest}
-          onLogout={onLogout}
-          onLogin={onLogin}
+          onLogout={logout}
+          onLogin={() => {}}
           sessions={userSessions}
           onSessionSelect={handleSessionSelect}
-          onSessionDelete={deleteSession}
-          onSessionRename={renameSession}
-          currentSessionId={currentSessionId}
+          onSessionDelete={handleSessionDelete}
+          onSessionRename={handleSessionRename}
+          currentSessionId={currentChatId}
         />
       )}
 

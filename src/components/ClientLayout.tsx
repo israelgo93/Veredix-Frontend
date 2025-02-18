@@ -1,14 +1,12 @@
-//src/components/ClientLayout.tsx
 "use client"
 
 import type React from "react"
-
 import { ThemeToggle } from "./theme-toggle"
 import Link from "next/link"
 import { Button } from "./ui/button"
 import { useState, useEffect } from "react"
+import { useAuth } from "../contexts/AuthContext"
 
-// Hook para detectar dispositivos móviles
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
   useEffect(() => {
@@ -23,35 +21,36 @@ function useIsMobile() {
 interface ClientLayoutProps {
   children: React.ReactNode
   hideLayout?: boolean
-  isAuthenticated?: boolean
-  onLogin?: () => void
-  onLogout?: () => void
 }
 
-export default function ClientLayout({
-  children,
-  hideLayout = false,
-  isAuthenticated = false,
-  onLogin,
-  onLogout,
-}: ClientLayoutProps) {
+export default function ClientLayout({ children, hideLayout = false }: ClientLayoutProps) {
   const isMobile = useIsMobile()
+  const { isAuthenticated, logout, loading } = useAuth()
 
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-gray-900">
       {!hideLayout && (
         <header className="sticky top-0 z-50 w-full border-b bg-white dark:bg-gray-900 shadow-sm">
           <div className="container flex h-14 items-center px-2 md:px-4">
-            {/* Izquierda: solo el título del sitio */}
             <div className="flex flex-1 items-center">
               <Link href="/" className="flex items-center">
                 <span className="font-bold text-2xl dark:text-gray-200 text-gray-700">Veredix</span>
               </Link>
             </div>
 
-            {/* Derecha: botones (solo en escritorio) */}
             <div className={isMobile ? "flex items-center space-x-2" : "hidden md:flex items-center space-x-2"}>
-              {!isAuthenticated ? (
+              {loading ? (
+                <span>Cargando...</span>
+              ) : isAuthenticated ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => logout()}
+                  className="rounded-full px-3 py-1 bg-black text-white dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-800 dark:hover:bg-gray-600 transition-all"
+                >
+                  Cerrar Sesión
+                </Button>
+              ) : (
                 <>
                   <Link href="/auth/login">
                     <Button
@@ -72,18 +71,8 @@ export default function ClientLayout({
                     </Button>
                   </Link>
                 </>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={onLogout}
-                  className="rounded-full px-3 py-1 bg-black text-white dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-800 dark:hover:bg-gray-600 transition-all"
-                >
-                  Salir
-                </Button>
               )}
 
-              {/* Toggle Theme */}
               <ThemeToggle />
             </div>
           </div>
