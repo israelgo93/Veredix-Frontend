@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
-import { createUserSession } from "../lib/supabaseUtils"
 import { supabase } from "../lib/supabase"
 import { getUserId } from "../lib/utils"
 import { v4 as uuidv4 } from "uuid"
@@ -130,28 +129,14 @@ export function useChat() {
     }
   }, [])
 
-  // Create a new chat session
+  // Función para crear un nuevo chat: se limpia el session actual y se actualiza la lista de sesiones
   const createNewChat = useCallback(async () => {
+    setCurrentChatId("")
+    setMessages([])
+    localStorage.removeItem("currentChatId")
     if (authSession?.user) {
-      const chatId = uuidv4() // Generate a unique ID for the chat session
-      const initialTitle = "Nueva conversación"
-
-      try {
-        const newSession = await createUserSession(authSession.user.id, chatId, "veredix", initialTitle)
-
-        if (newSession) {
-          setCurrentChatId(chatId)
-          localStorage.setItem("currentChatId", chatId)
-
-          // Update the sessions list
-          const sessions = await fetchUserSessions(authSession.user.id)
-          setUserSessions(sessions)
-        } else {
-          console.error("Failed to create new chat session")
-        }
-      } catch (error) {
-        console.error("Error creating new chat session:", error)
-      }
+      const sessions = await fetchUserSessions(authSession.user.id)
+      setUserSessions(sessions)
     }
   }, [authSession])
 
@@ -163,6 +148,7 @@ export function useChat() {
     }
   }, [currentUserId])
 
+  // Procesa los chunks recibidos del stream y extrae objetos JSON válidos.
   const processJsonObjects = useCallback((text: string): ApiResponse[] => {
     const jsonObjects: ApiResponse[] = []
     bufferRef.current += text
@@ -183,7 +169,7 @@ export function useChat() {
 
       if (braceCount === 0) {
         try {
-          const jsonString = bufferRef.current.slice(openBraceIndex, endIndex)
+          const jsonString = bufferRef.current.slice(openBraceIndex, endIndex).trim()
           const parsed = JSON.parse(jsonString)
           if (parsed.extra_data && parsed.extra_data.references && Array.isArray(parsed.extra_data.references)) {
             const flattenedSources: Source[] = []
@@ -239,37 +225,50 @@ export function useChat() {
     [],
   )
 
+  // Función para cargar una sesión existente al seleccionarla en el sidebar.
+  // Se consulta el endpoint y se reconstruye el historial a partir de sessionData.memory.messages.
   const loadSession = async (chatId: string) => {
     try {
       const response = await fetch(
-        `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${chatId}?user_id=${currentUserId}`,
+        `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${chatId}?user_id=${currentUserId}`
       )
-
+  
       if (!response.ok) {
         throw new Error("Failed to load session")
       }
-
+  
       const sessionData = await response.json()
-
-      const chatMessages: Message[] = []
-      sessionData.memory.messages.forEach((msg: any) => {
-        if (msg.role !== "system") {
-          chatMessages.push({
-            role: msg.role,
-            content: msg.content,
-            status: "complete",
-          })
-        }
-      })
-
-      setMessages(chatMessages)
+  
+      // Filtrar mensajes para incluir solo "user" y "assistant" que tengan contenido
+      const rawMessages = sessionData.memory?.messages || []
+      const filteredMessages: Message[] = rawMessages
+        .filter((msg: any) => {
+          return (
+            (msg.role === "user" || msg.role === "assistant") &&
+            msg.content != null
+          )
+        })
+        .map((msg: any) => ({
+          role: msg.role,
+          content: msg.content,
+          status: "complete",
+        }))
+  
+      // Extraer fuentes desde extra_data.references si existen
+      if (sessionData.memory?.extra_data?.references) {
+        setSources(sessionData.memory.extra_data.references)
+      } else if (sessionData.extra_data?.references) {
+        setSources(sessionData.extra_data.references)
+      }
+  
+      setMessages(filteredMessages)
       setCurrentChatId(chatId)
       localStorage.setItem("currentChatId", chatId)
     } catch (error) {
       console.error("Error loading session:", error)
       throw error
     }
-  }
+  }  
 
   const sendMessage = useCallback(
     async (message: string, regenerate = false) => {
@@ -277,12 +276,12 @@ export function useChat() {
         setIsLoading(true)
         setCanStopResponse(true)
 
-        // Create a new chat session if authenticated user doesn't have one
+        // Si el usuario está autenticado y no hay sesión actual, se inicia un nuevo chat
         if (authSession?.user && !currentChatId) {
           await createNewChat()
         }
 
-        // Update messages state
+        // Actualizar el estado de mensajes
         if (!regenerate) {
           setMessages((prev) => [
             ...prev,
@@ -304,7 +303,8 @@ export function useChat() {
         formData.append("message", message)
         formData.append("stream", "true")
         formData.append("monitor", "true")
-        formData.append("chat_id", currentChatId || "")
+        // Se envía "session_id" (vacío si es un nuevo chat)
+        formData.append("session_id", currentChatId || "")
         formData.append("user_id", currentUserId || getUserId())
 
         abortControllerRef.current = new AbortController()
@@ -346,6 +346,15 @@ export function useChat() {
                 currentContentRef.current = parsedData.content
               }
               updateAssistantMessage(currentContentRef.current, true, "complete", regenerate)
+              // Si el response incluye session_id, se actualiza el estado y se refrescan las sesiones
+              if (parsedData.session_id) {
+                setCurrentChatId(parsedData.session_id)
+                localStorage.setItem("currentChatId", parsedData.session_id)
+                if (authSession?.user) {
+                  const sessions = await fetchUserSessions(authSession.user.id)
+                  setUserSessions(sessions)
+                }
+              }
             }
           }
         }
@@ -429,7 +438,7 @@ export function useChat() {
 
   return {
     messages,
-    setMessages, // Add this line
+    setMessages,
     sendMessage,
     isLoading,
     cancelRequest,
@@ -444,5 +453,3 @@ export function useChat() {
     createNewChat,
   }
 }
-
-

@@ -298,13 +298,12 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     isLoading,
     sources,
     userSessions,
-    deleteSession,
-    renameSession,
     currentUserId,
     currentChatId,
     loadSession,
     createNewChat,
-    clearCurrentChat,
+    deleteSession,
+    renameSession,
   } = useChat()
   const { theme } = useTheme()
   const { isAuthenticated, user, logout } = useAuth()
@@ -322,8 +321,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
   const [chatStarted, setChatStarted] = useState(false)
-  const [selectedSession, setSelectedSession] = useState<string | null>(null)
-  const [sessionError, setSessionError] = useState<string | null>(null)
 
   useEffect(() => {
     console.log("ChatInterface mounted")
@@ -452,33 +449,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   }
 
   const handleNewChatRequest = async () => {
-    if (isAuthenticated) {
-      await createNewChat()
-      setIsInitialView(true)
-    } else if (messages.length > 0) {
-      setShowNewChatModal(true)
-    } else {
-      clearCurrentChat()
-      setIsInitialView(true)
-    }
-  }
-
-  const handleSessionSelect = async (sessionId: string) => {
-    try {
-      await loadSession(sessionId)
-      setIsInitialView(false)
-    } catch (error) {
-      console.error("Error loading session:", error)
-      setErrorMessage("Error loading chat history")
-    }
-  }
-
-  const handleSessionDelete = async (sessionId: string) => {
-    await deleteSession(sessionId)
-  }
-
-  const handleSessionRename = async (sessionId: string, newTitle: string) => {
-    await renameSession(sessionId, newTitle)
+    await createNewChat()
+    setIsInitialView(true)
+    setMessages([])
   }
 
   useEffect(() => {}, [])
@@ -530,12 +503,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
             </div>
           </div>
         )}
-        {sessionError && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-            <span className="block sm:inline">{sessionError}</span>
-          </div>
-        )}
-
         {isInitialView ? (
           <div className="flex-1 flex flex-col items-center justify-center p-4">
             <div className="w-full max-w-3xl space-y-6 px-4">
@@ -782,13 +749,39 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           onLogout={logout}
           onLogin={() => {}}
           sessions={userSessions}
-          onSessionSelect={handleSessionSelect}
-          onSessionDelete={handleSessionDelete}
-          onSessionRename={handleSessionRename}
           currentSessionId={currentChatId}
+          onSessionSelect={(sessionId: string) => {
+            loadSession(sessionId)
+              .then(() => {
+                if (isMobile) {
+                  setSidebarOpen(false)
+                }
+              })
+              .catch((error) => {
+                console.error("Error loading session:", error)
+              })
+          }}
+          onSessionDelete={(sessionId: string) => {
+            deleteSession(sessionId)
+              .then(() => {
+                // Opcional: se puede realizar alguna acción adicional tras borrar la sesión
+              })
+              .catch((error) => {
+                console.error("Error deleting session:", error)
+              })
+          }}
+          onSessionRename={(sessionId: string, newName: string) => {
+            renameSession(sessionId, newName)
+              .then(() => {
+                // Opcional: se puede refrescar la lista de sesiones si es necesario
+              })
+              .catch((error) => {
+                console.error("Error renaming session:", error)
+              })
+          }}
         />
       )}
-
+      
       {showNewChatModal && !isAuthenticated && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
