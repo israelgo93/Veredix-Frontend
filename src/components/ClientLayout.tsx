@@ -25,11 +25,12 @@ interface ClientLayoutProps {
 
 export default function ClientLayout({ children, hideLayout = false }: ClientLayoutProps) {
   const isMobile = useIsMobile()
-  const { isAuthenticated, logout, loading } = useAuth()
+  const { isAuthenticated, loading } = useAuth()
 
   return (
     <div className="flex min-h-screen flex-col bg-white dark:bg-gray-900">
-      {!hideLayout && (
+      {/* Muestra el header sólo si NO está oculto y el usuario NO está autenticado */}
+      {!hideLayout && !isAuthenticated && (
         <header className="sticky top-0 z-50 w-full border-b bg-white dark:bg-gray-900 shadow-sm">
           <div className="container flex h-14 items-center px-2 md:px-4">
             <div className="flex flex-1 items-center">
@@ -41,15 +42,6 @@ export default function ClientLayout({ children, hideLayout = false }: ClientLay
             <div className={isMobile ? "flex items-center space-x-2" : "hidden md:flex items-center space-x-2"}>
               {loading ? (
                 <span>Cargando...</span>
-              ) : isAuthenticated ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => logout()}
-                  className="rounded-full px-3 py-1 bg-black text-white dark:bg-gray-700 dark:text-gray-200 hover:bg-gray-800 dark:hover:bg-gray-600 transition-all"
-                >
-                  Cerrar Sesión
-                </Button>
               ) : (
                 <>
                   <Link href="/auth/login">
@@ -72,7 +64,6 @@ export default function ClientLayout({ children, hideLayout = false }: ClientLay
                   </Link>
                 </>
               )}
-
               <ThemeToggle />
             </div>
           </div>
@@ -101,4 +92,3 @@ export default function ClientLayout({ children, hideLayout = false }: ClientLay
     </div>
   )
 }
-

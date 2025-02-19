@@ -258,7 +258,7 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-[9999] overflow-hidden">
+    <div className="fixed inset-0 z-[999999] overflow-hidden"> {/* Aumentamos el z-index */}
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
         <div ref={drawerRef} className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative">
@@ -452,22 +452,22 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     await createNewChat()
     setIsInitialView(true)
     setMessages([])
+    onNewChat?.() // Importante para que page.tsx decida si muestra header
   }
-
-  useEffect(() => {}, [])
 
   return (
     <div
-      className={`flex bg-white dark:bg-gray-900 text-sm overflow-hidden fixed inset-x-0 bottom-0 ${
-        chatStarted ? "bg-transparent" : ""
-      }`}
+      className="flex bg-white dark:bg-gray-900 text-sm overflow-hidden fixed inset-x-0 bottom-0"
       style={{ top: "64px" }}
     >
-      {!chatStarted && (
-        <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-gray-950">
-          <div className="absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
-        </div>
-      )}
+      {/* Fondo siempre visible */}
+      <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-gray-950">
+        <div className="absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+      </div>
+
+      {/* Header móvil:
+          - Se muestra siempre que isInitialView sea false, para tener el botón de abrir sidebar.
+          - Para usuarios autenticados o no. */}
       {!isInitialView && isMobile && (
         <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-white dark:bg-gray-900 shadow-md z-50 justify-between">
           <div>
@@ -482,15 +482,18 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
             </Button>
           </div>
           <div>
-            <Link href="/auth/login">
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full px-3 py-1 bg-white text-black dark:bg-gray-800 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
-              >
-                Iniciar Sesión
-              </Button>
-            </Link>
+            {/* Si no está autenticado, mostramos botón "Iniciar Sesión" */}
+            {!isAuthenticated && (
+              <Link href="/auth/login">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full px-3 py-1 bg-white text-black dark:bg-gray-800 dark:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-all"
+                >
+                  Iniciar Sesión
+                </Button>
+              </Link>
+            )}
           </div>
         </header>
       )}
@@ -735,9 +738,15 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         )}
       </div>
 
-      {showSources && sources.length > 0 && <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />}
+      {/* Panel de Fuentes */}
+      {showSources && sources.length > 0 && (
+        <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />
+      )}
 
-      {!isInitialView && (
+      {/* Sidebar:
+          - Usuarios autenticados => siempre.
+          - No autenticados => sólo tras iniciar conversación (isInitialView === false). */}
+      {(isAuthenticated || (!isAuthenticated && !isInitialView)) && (
         <Sidebar
           isOpen={sidebarOpen}
           toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
@@ -764,7 +773,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           onSessionDelete={(sessionId: string) => {
             deleteSession(sessionId)
               .then(() => {
-                // Opcional: se puede realizar alguna acción adicional tras borrar la sesión
+                // Acciones opcionales
               })
               .catch((error) => {
                 console.error("Error deleting session:", error)
@@ -773,7 +782,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           onSessionRename={(sessionId: string, newName: string) => {
             renameSession(sessionId, newName)
               .then(() => {
-                // Opcional: se puede refrescar la lista de sesiones si es necesario
+                // Acciones opcionales
               })
               .catch((error) => {
                 console.error("Error renaming session:", error)
@@ -781,7 +790,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           }}
         />
       )}
-      
+
       {showNewChatModal && !isAuthenticated && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
@@ -817,4 +826,3 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     </div>
   )
 }
-
