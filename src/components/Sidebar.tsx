@@ -1,10 +1,20 @@
 "use client"
 
-import { Menu, ChevronsLeft, LogIn, UserPlus, LogOut, MessageSquare, Edit, Trash2 } from "lucide-react"
+import {
+  Menu,
+  ChevronsLeft,
+  LogIn,
+  UserPlus,
+  LogOut,
+  MessageSquare,
+  Edit,
+  Trash2,
+  MoreHorizontal,
+} from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "./theme-toggle"
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Input } from "./ui/input"
 import type { UserSession } from "../types"
 
@@ -43,23 +53,20 @@ export function Sidebar({
 }: SidebarProps) {
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [newSessionName, setNewSessionName] = useState("")
+  const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isAuthenticated && !isMobile && !isOpen) {
-      toggleSidebar()
-    }
-  }, [isAuthenticated, isMobile, isOpen, toggleSidebar])
+  // El Sidebar estará siempre colapsado inicialmente, 
+  // por lo que se recomienda que 'isOpen' se inicie en false en tu estado global o componente padre.
 
   const handleNewChat = () => {
-    if (onNewChat) {
-      onNewChat()
-    }
+    onNewChat?.()
     if (isMobile) {
       onClose()
     }
   }
 
   const handleSessionRename = (sessionId: string, currentName: string) => {
+    setOpenMenuSessionId(null)
     setEditingSessionId(sessionId)
     setNewSessionName(currentName)
   }
@@ -72,8 +79,15 @@ export function Sidebar({
     setNewSessionName("")
   }
 
+  const handleSessionDelete = (sessionId: string) => {
+    setOpenMenuSessionId(null)
+    onSessionDelete?.(sessionId)
+  }
+
+  // Contenido del sidebar expandido
   const sidebarContent = (
-    <>
+    <div className="relative h-full flex flex-col">
+      {/* Encabezado */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <h2 className="text-lg font-semibold">Menú</h2>
         <Button
@@ -86,6 +100,8 @@ export function Sidebar({
           <ChevronsLeft className="h-5 w-5" />
         </Button>
       </div>
+
+      {/* Botón Nuevo Chat */}
       <div className="p-4">
         <Button
           variant="outline"
@@ -97,16 +113,26 @@ export function Sidebar({
           <span>Nuevo chat</span>
         </Button>
       </div>
-      <nav className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+
+      {/* Lista de sesiones */}
+      <nav className="flex-1 overflow-y-auto p-4 space-y-4 text-sm overflow-x-hidden">
         {isAuthenticated && sessions && sessions.length > 0 && (
           <div className="mt-2">
             <h3 className="text-xs font-bold uppercase mb-2 text-muted-foreground">Chats recientes</h3>
             <ul className="space-y-1">
-              {sessions.map((session) => (
-                <li key={session.session_id} className="group">
-                  <div className="flex items-center gap-1">
-                    {editingSessionId === session.session_id ? (
-                      <div className="flex-1 flex items-center gap-1">
+              {sessions.map((session) => {
+                const isEditing = editingSessionId === session.session_id
+                const isOpenMenu = openMenuSessionId === session.session_id
+
+                const displayTitle =
+                  session.title.length > 20
+                    ? session.title.slice(0, 20) + "..."
+                    : session.title
+
+                return (
+                  <li key={session.session_id} className="group relative w-full">
+                    {isEditing ? (
+                      <div className="flex items-center gap-1 w-full">
                         <Input
                           value={newSessionName}
                           onChange={(e) => setNewSessionName(e.target.value)}
@@ -115,7 +141,7 @@ export function Sidebar({
                               submitRename(session.session_id)
                             }
                           }}
-                          className="h-8 text-sm"
+                          className="h-8 text-sm flex-1"
                           autoFocus
                         />
                         <Button
@@ -129,51 +155,71 @@ export function Sidebar({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setEditingSessionId(null)}
+                          onClick={() => {
+                            setEditingSessionId(null)
+                            setNewSessionName("")
+                          }}
                           className="h-8 px-2"
                         >
                           ✕
                         </Button>
                       </div>
                     ) : (
-                      <>
+                      <div className="flex items-center w-full">
                         <button
                           onClick={() => onSessionSelect?.(session.session_id)}
-                          className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors ${
+                          className={`flex-1 min-w-0 flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors ${
                             currentSessionId === session.session_id ? "bg-accent" : ""
                           }`}
                         >
                           <MessageSquare className="h-4 w-4 shrink-0" />
-                          <span className="truncate-sidebar">{session.title}</span>
+                          <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                            {displayTitle}
+                          </span>
                         </button>
-                        <div className="hidden group-hover:flex items-center">
+
+                        <div className="relative">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleSessionRename(session.session_id, session.title)}
+                            onClick={() =>
+                              setOpenMenuSessionId(isOpenMenu ? null : session.session_id)
+                            }
                             className="h-8 w-8"
                           >
-                            <Edit className="h-4 w-4" />
+                            <MoreHorizontal className="h-4 w-4" />
                           </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => onSessionDelete?.(session.session_id)}
-                            className="h-8 w-8"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {isOpenMenu && (
+                            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-200 rounded-md shadow-md z-50 flex flex-col py-1">
+                              <button
+                                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
+                                onClick={() => handleSessionRename(session.session_id, session.title)}
+                              >
+                                <Edit className="h-4 w-4" />
+                                <span>Cambiar nombre</span>
+                              </button>
+                              <button
+                                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
+                                onClick={() => handleSessionDelete(session.session_id)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                <span>Eliminar</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      </>
+                      </div>
                     )}
-                  </div>
-                </li>
-              ))}
+                  </li>
+                )
+              })}
             </ul>
           </div>
         )}
       </nav>
-      <div className="p-4 border-t border-border">
+
+      {/* Botón Cerrar Sesión fijo al fondo */}
+      <div className="absolute bottom-0 w-full p-4 border-t border-border bg-background">
         {!isAuthenticated ? (
           <div className="flex flex-col gap-2">
             <Link href="/auth/login">
@@ -198,23 +244,22 @@ export function Sidebar({
             </Link>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onLogout}
-              className="w-full rounded-full px-3 py-2 border border-gray-300 text-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all flex items-center justify-center gap-2"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>Cerrar Sesión</span>
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onLogout}
+            className="w-full rounded-full px-3 py-2 border border-gray-300 text-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all flex items-center justify-center gap-2"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>Cerrar Sesión</span>
+          </Button>
         )}
+        <div className="pt-2 text-xs text-center text-muted-foreground">© 2025 Chat Legal IA</div>
       </div>
-      <div className="p-4 text-xs text-center text-muted-foreground">© 2025 Chat Legal IA</div>
-    </>
+    </div>
   )
 
+  // Vista móvil: el overlay + sidebar expandido
   if (isMobile) {
     return (
       <div className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}>
@@ -235,13 +280,17 @@ export function Sidebar({
     )
   }
 
+  // Vista escritorio:
+  // Se muestra un botón lateral fijo y el sidebar expandido se desliza cuando isOpen = true
   return (
     <>
+      {/* Botón pequeño lateral colapsado */}
       <div
         className={`fixed top-0 left-0 h-full w-16 bg-background shadow-lg z-50 flex flex-col justify-between transition-all duration-300 ${
           isOpen ? "hidden" : "translate-x-0"
         }`}
       >
+        {/* Botón para abrir el sidebar */}
         <Button
           variant="ghost"
           size="icon"
@@ -251,6 +300,8 @@ export function Sidebar({
         >
           {isOpen ? <ChevronsLeft className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </Button>
+
+        {/* Botón "Nuevo chat" en modo colapsado */}
         <Button
           variant="ghost"
           size="icon"
@@ -260,10 +311,13 @@ export function Sidebar({
         >
           <MessageSquare className="h-6 w-6" />
         </Button>
+
         <div className="m-2 mt-auto">
           <ThemeToggle />
         </div>
       </div>
+
+      {/* Sidebar expandido */}
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-background shadow-lg z-40 transform transition-transform duration-300 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
@@ -274,5 +328,3 @@ export function Sidebar({
     </>
   )
 }
-
-
