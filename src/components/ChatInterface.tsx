@@ -668,7 +668,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                       ),
                                       hr: () => <hr className="my-6 border-border" />,
                                       img: (props) => (
-                                        <img {...props} className="rounded-lg border border-border max-w-full h-auto" />
+                                        <img alt={props.alt || ""} {...props} className="rounded-lg border border-border max-w-full h-auto" />
                                       ),
                                       strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                                       em: ({ children }) => <em className="italic">{children}</em>,

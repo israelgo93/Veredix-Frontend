@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { supabase } from "../lib/supabase"
 import { getUserId } from "../lib/utils"
+import type { Session } from "@supabase/supabase-js"
 
 export interface Message {
   role: "user" | "assistant"
@@ -10,15 +11,17 @@ export interface Message {
   status?: "thinking" | "responding" | "complete"
 }
 
+export interface ExtraData {
+  references?: { references: Source[] }[]
+}
+
 export interface ApiResponse {
   content: string
   content_type: string
   event: string
   messages: Message[]
-  sources?: any
-  extra_data?: {
-    references?: any[]
-  }
+  sources?: Source[]
+  extra_data?: ExtraData
   session_id?: string
   status?: "thinking" | "reasoning" | "completing"
 }
@@ -33,7 +36,7 @@ export interface Source {
   content: string
 }
 
-interface UserSession {
+export interface UserSession {
   id: string
   user_id: string
   session_id: string
@@ -42,7 +45,7 @@ interface UserSession {
   created_at: string
 }
 
-const fetchUserSessions = async (userId: string) => {
+const fetchUserSessions = async (userId: string): Promise<UserSession[]> => {
   if (!userId) return []
   try {
     const response = await fetch(
@@ -67,7 +70,7 @@ export function useChat() {
   const [userSessions, setUserSessions] = useState<UserSession[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
-  const [authSession, setAuthSession] = useState<any>(null)
+  const [authSession, setAuthSession] = useState<Session | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentContentRef = useRef<string>("")
@@ -128,7 +131,6 @@ export function useChat() {
     }
   }, [])
 
-  // Función para crear un nuevo chat: se limpia el session actual y se actualiza la lista de sesiones
   const createNewChat = useCallback(async () => {
     setCurrentChatId("")
     setMessages([])
@@ -147,7 +149,6 @@ export function useChat() {
     }
   }, [currentUserId])
 
-  // Procesa los chunks recibidos del stream y extrae objetos JSON válidos.
   const processJsonObjects = useCallback((text: string): ApiResponse[] => {
     const jsonObjects: ApiResponse[] = []
     bufferRef.current += text
@@ -170,17 +171,18 @@ export function useChat() {
         try {
           const jsonString = bufferRef.current.slice(openBraceIndex, endIndex).trim()
           const parsed = JSON.parse(jsonString)
-          if (parsed.extra_data && parsed.extra_data.references && Array.isArray(parsed.extra_data.references)) {
+          const parsedResponse = parsed as ApiResponse
+          if (parsedResponse.extra_data && parsedResponse.extra_data.references && Array.isArray(parsedResponse.extra_data.references)) {
             const flattenedSources: Source[] = []
-            parsed.extra_data.references.forEach((refGroup: any) => {
+            parsedResponse.extra_data.references.forEach((refGroup: { references: Source[] }) => {
               if (refGroup.references && Array.isArray(refGroup.references)) {
                 flattenedSources.push(...refGroup.references)
               }
             })
             setSources(flattenedSources)
           }
-          if (parsed.event && parsed.content !== undefined) {
-            jsonObjects.push(parsed)
+          if (parsedResponse.event && parsedResponse.content !== undefined) {
+            jsonObjects.push(parsedResponse)
           }
           startIndex = endIndex
         } catch (e) {
@@ -196,12 +198,7 @@ export function useChat() {
   }, [])
 
   const updateAssistantMessage = useCallback(
-    (
-      content: string,
-      isComplete = false,
-      status: "thinking" | "responding" | "complete" = "responding",
-      regenerate = false,
-    ) => {
+    (content: string, status: "thinking" | "responding" | "complete" = "responding", regenerate = false) => {
       setMessages((prev) => {
         const newMessages = [...prev]
         const lastAssistantIndex = regenerate
@@ -224,8 +221,6 @@ export function useChat() {
     [],
   )
 
-  // Función para cargar una sesión existente al seleccionarla en el sidebar.
-  // Se consulta el endpoint y se reconstruye el historial a partir de sessionData.memory.messages.
   const loadSession = async (chatId: string) => {
     try {
       const response = await fetch(
@@ -238,22 +233,17 @@ export function useChat() {
   
       const sessionData = await response.json()
   
-      // Filtrar mensajes para incluir solo "user" y "assistant" que tengan contenido
       const rawMessages = sessionData.memory?.messages || []
       const filteredMessages: Message[] = rawMessages
-        .filter((msg: any) => {
-          return (
-            (msg.role === "user" || msg.role === "assistant") &&
-            msg.content != null
-          )
+        .filter((msg: { role: "user" | "assistant"; content: string | null }) => {
+          return ((msg.role === "user" || msg.role === "assistant") && msg.content != null)
         })
-        .map((msg: any) => ({
+        .map((msg: { role: "user" | "assistant"; content: string }) => ({
           role: msg.role,
           content: msg.content,
           status: "complete",
         }))
   
-      // Extraer fuentes desde extra_data.references si existen
       if (sessionData.memory?.extra_data?.references) {
         setSources(sessionData.memory.extra_data.references)
       } else if (sessionData.extra_data?.references) {
@@ -267,7 +257,7 @@ export function useChat() {
       console.error("Error loading session:", error)
       throw error
     }
-  }  
+  }
 
   const sendMessage = useCallback(
     async (message: string, regenerate = false) => {
@@ -275,12 +265,10 @@ export function useChat() {
         setIsLoading(true)
         setCanStopResponse(true)
 
-        // Si el usuario está autenticado y no hay sesión actual, se inicia un nuevo chat
         if (authSession?.user && !currentChatId) {
           await createNewChat()
         }
 
-        // Actualizar el estado de mensajes
         if (!regenerate) {
           setMessages((prev) => [
             ...prev,
@@ -302,7 +290,6 @@ export function useChat() {
         formData.append("message", message)
         formData.append("stream", "true")
         formData.append("monitor", "true")
-        // Se envía "session_id" (vacío si es un nuevo chat)
         formData.append("session_id", currentChatId || "")
         formData.append("user_id", currentUserId || getUserId())
 
@@ -339,13 +326,12 @@ export function useChat() {
           for (const parsedData of jsonObjects) {
             if (parsedData.event === "RunResponse" && parsedData.content) {
               currentContentRef.current += parsedData.content
-              updateAssistantMessage(currentContentRef.current, false, "responding", regenerate)
+              updateAssistantMessage(currentContentRef.current, "responding", regenerate)
             } else if (parsedData.event === "RunCompleted") {
               if (parsedData.content) {
                 currentContentRef.current = parsedData.content
               }
-              updateAssistantMessage(currentContentRef.current, true, "complete", regenerate)
-              // Si el response incluye session_id, se actualiza el estado y se refrescan las sesiones
+              updateAssistantMessage(currentContentRef.current, "complete", regenerate)
               if (parsedData.session_id) {
                 setCurrentChatId(parsedData.session_id)
                 localStorage.setItem("currentChatId", parsedData.session_id)
@@ -362,13 +348,12 @@ export function useChat() {
           console.log("Request aborted by user")
           updateAssistantMessage(
             currentContentRef.current + "\n\n[Mensaje interrumpido por el usuario]",
-            true,
             "complete",
             regenerate,
           )
         } else {
           console.error("Error in sendMessage:", error)
-          updateAssistantMessage("Error al procesar el mensaje", true, "complete", regenerate)
+          updateAssistantMessage("Error al procesar el mensaje", "complete", regenerate)
         }
       } finally {
         setIsLoading(false)
