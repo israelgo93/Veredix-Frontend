@@ -19,7 +19,7 @@ export function getUserId() {
       sessionStorage.setItem("userId", userId)
     }
     return userId
-  } catch (error) {
+  } catch {
     // Fallback if sessionStorage is not available
     return generateRandomUserId()
   }
@@ -28,8 +28,8 @@ export function getUserId() {
 export function setUserIdInSession(userId: string) {
   try {
     sessionStorage.setItem("userId", userId)
-  } catch (error) {
-    console.error("Error setting userId in session:", error)
+  } catch {
+    console.error("Error setting userId in session:")
   }
 }
 

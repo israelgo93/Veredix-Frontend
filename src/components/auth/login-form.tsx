@@ -13,9 +13,7 @@ import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 
-interface LoginFormProps extends React.HTMLAttributes<HTMLDivElement> {}
-
-export function LoginForm({ className, ...props }: LoginFormProps) {
+export function LoginForm({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [email, setEmail] = useState<string>("")
   const [password, setPassword] = useState<string>("")
@@ -38,12 +36,10 @@ export function LoginForm({ className, ...props }: LoginFormProps) {
       }
 
       if (data.user) {
-        // Redirect to home page after successful login
-        // Session will be created when first message is sent
         router.push("/")
       }
     } catch (error) {
-      setError(error.message)
+      setError(error instanceof Error ? error.message : String(error))
     } finally {
       setIsLoading(false)
     }

@@ -23,7 +23,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
 import { useChat, type Source } from "../hooks/useChat"
-import { useTheme } from "next-themes"
+//import { useTheme } from "next-themes"
 import AutoResizingTextarea from "./AutoResizingTextarea"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
@@ -299,14 +299,14 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     isLoading,
     sources,
     userSessions,
-    currentUserId,
+    //currentUserId,
     currentChatId,
     loadSession,
     createNewChat,
     deleteSession,
     renameSession,
   } = useChat()
-  const { theme } = useTheme()
+  //const { theme } = useTheme()
   const { isAuthenticated, user, logout } = useAuth()
   const [isInitialView, setIsInitialView] = useState(true)
   const [input, setInput] = useState("")
@@ -321,7 +321,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const isScrollingRef = useRef(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
-  const [chatStarted, setChatStarted] = useState(false)
+  //const [setChatStarted] = useState(false)
 
   useEffect(() => {
     console.log("ChatInterface mounted")
@@ -332,8 +332,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
 
   useEffect(() => {
     if (!isInitialView) {
-      console.log("Chat started")
-      setChatStarted(true)
+      //console.log("Chat started")
+      //setChatStarted(true)
       onChatStarted?.()
     }
   }, [isInitialView, onChatStarted])
@@ -641,7 +641,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                       blockquote: ({ children }) => (
                                         <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
                                       ),
-                                      code: ({ inline, children }) =>
+                                      code: ({ inline, children }: { inline?: boolean; children: React.ReactNode }) =>
                                         inline ? (
                                           <code className={markdownStyles.code}>{children}</code>
                                         ) : (

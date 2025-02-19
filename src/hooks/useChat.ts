@@ -3,7 +3,6 @@
 import { useState, useCallback, useRef, useEffect } from "react"
 import { supabase } from "../lib/supabase"
 import { getUserId } from "../lib/utils"
-import { v4 as uuidv4 } from "uuid"
 
 export interface Message {
   role: "user" | "assistant"

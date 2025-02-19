@@ -13,9 +13,7 @@ import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import { useRouter } from "next/navigation"
 
-interface SignUpFormProps extends React.HTMLAttributes<HTMLDivElement> {}
-
-export function SignUpForm({ className, ...props }: SignUpFormProps) {
+export function SignUpForm({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [name, setName] = useState<string>("")
   const [email, setEmail] = useState<string>("")
@@ -44,12 +42,10 @@ export function SignUpForm({ className, ...props }: SignUpFormProps) {
       }
 
       if (data.user) {
-        // Redirect to home page after successful registration
-        // Session will be created when first message is sent
         router.push("/")
       }
     } catch (error) {
-      setError(error.message)
+      setError(error instanceof Error ? error.message : String(error))
     } finally {
       setIsLoading(false)
     }
