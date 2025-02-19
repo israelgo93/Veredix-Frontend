@@ -31,6 +31,7 @@ import { QuickActions } from "./QuickActions"
 import { Sidebar } from "./Sidebar"
 import Link from "next/link"
 import { useAuth } from "../contexts/AuthContext"
+import { ThemeToggle } from "./theme-toggle"
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -258,7 +259,7 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
   }, [onClose])
 
   return (
-    <div className="fixed inset-0 z-[999999] overflow-hidden"> {/* Aumentamos el z-index */}
+    <div className="fixed inset-0 z-[999999] overflow-hidden">
       <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
         <div ref={drawerRef} className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative">
@@ -448,12 +449,23 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     }
   }
 
+  // Activamos el modal si el usuario no está autenticado
+  // De lo contrario, creamos el nuevo chat directamente
   const handleNewChatRequest = async () => {
+    if (!isAuthenticated) {
+      setShowNewChatModal(true)
+      return
+    }
     await createNewChat()
     setIsInitialView(true)
     setMessages([])
-    onNewChat?.() // Importante para que page.tsx decida si muestra header
+    onNewChat?.()
   }
+
+  // Determina si mostrar el header móvil:
+  //  - isMobile
+  //  - Y (usuario autenticado O ya inició la conversación)
+  const showMobileHeader = isMobile && (isAuthenticated || !isInitialView)
 
   return (
     <div
@@ -465,10 +477,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         <div className="absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
       </div>
 
-      {/* Header móvil:
-          - Se muestra siempre que isInitialView sea false, para tener el botón de abrir sidebar.
-          - Para usuarios autenticados o no. */}
-      {!isInitialView && isMobile && (
+      {/* Header móvil: se muestra si el usuario está en móvil Y (está autenticado o ya inició el chat) */}
+      {showMobileHeader && (
         <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-white dark:bg-gray-900 shadow-md z-50 justify-between">
           <div>
             <Button
@@ -481,8 +491,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
               {sidebarOpen ? <ChevronsLeft className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
           </div>
-          <div>
-            {/* Si no está autenticado, mostramos botón "Iniciar Sesión" */}
+          <div className="flex items-center gap-2">
             {!isAuthenticated && (
               <Link href="/auth/login">
                 <Button
@@ -494,6 +503,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                 </Button>
               </Link>
             )}
+            <ThemeToggle />
           </div>
         </header>
       )}
@@ -570,7 +580,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                     <div key={index} className="group flex justify-center">
                       <div className="w-full max-w-full sm:max-w-3xl">
                         <div
-                          className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                          className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${
+                            message.role === "user" ? "justify-end" : "justify-start"
+                          }`}
                         >
                           {message.role === "assistant" ? (
                             <Avatar className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 border">
@@ -586,7 +598,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                             </Avatar>
                           )}
                           <div
-                            className={`w-full flex flex-col ${message.role === "user" ? "items-end" : "items-start"}`}
+                            className={`w-full flex flex-col ${
+                              message.role === "user" ? "items-end" : "items-start"
+                            }`}
                           >
                             <div
                               className={`w-full max-w-[85%] sm:max-w-[90%] px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 ${
@@ -594,7 +608,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                   ? "bg-gray-100 dark:bg-gray-800 shadow-sm"
                                   : "bg-white dark:bg-gray-700"
                               } backdrop-blur-sm flex items-center rounded-lg ${
-                                message.role === "user" ? "text-primary justify-end" : "text-foreground justify-start"
+                                message.role === "user"
+                                  ? "text-primary justify-end"
+                                  : "text-foreground justify-start"
                               }`}
                             >
                               {message.role === "assistant" && showThinking ? (
@@ -646,7 +662,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                         </th>
                                       ),
                                       td: ({ children }) => (
-                                        <td className="border border-border px-3 py-2 whitespace-normal">{children}</td>
+                                        <td className="border border-border px-3 py-2 whitespace-normal">
+                                          {children}
+                                        </td>
                                       ),
                                       hr: () => <hr className="my-6 border-border" />,
                                       img: (props) => (
@@ -755,7 +773,11 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           isAuthenticated={isAuthenticated}
           userName={user?.email || ""}
           onNewChat={handleNewChatRequest}
-          onLogout={logout}
+          onLogout={() => {
+            logout()
+              .then(() => window.location.reload())
+              .catch((error) => console.error("Error on logout:", error))
+          }}
           onLogin={() => {}}
           sessions={userSessions}
           currentSessionId={currentChatId}
@@ -773,7 +795,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           onSessionDelete={(sessionId: string) => {
             deleteSession(sessionId)
               .then(() => {
-                // Acciones opcionales
+                // Recargamos la interfaz principal
+                window.location.reload()
               })
               .catch((error) => {
                 console.error("Error deleting session:", error)
@@ -791,6 +814,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         />
       )}
 
+      {/* Modal de advertencia para usuarios no autenticados al iniciar nuevo chat */}
       {showNewChatModal && !isAuthenticated && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">

@@ -55,9 +55,6 @@ export function Sidebar({
   const [newSessionName, setNewSessionName] = useState("")
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null)
 
-  // El Sidebar estará siempre colapsado inicialmente, 
-  // por lo que se recomienda que 'isOpen' se inicie en false en tu estado global o componente padre.
-
   const handleNewChat = () => {
     onNewChat?.()
     if (isMobile) {
@@ -84,12 +81,14 @@ export function Sidebar({
     onSessionDelete?.(sessionId)
   }
 
-  // Contenido del sidebar expandido
   const sidebarContent = (
     <div className="relative h-full flex flex-col">
-      {/* Encabezado */}
+      {/* Encabezado con ThemeToggle en vista móvil */}
       <div className="flex items-center justify-between p-4 border-b border-border">
-        <h2 className="text-lg font-semibold">Menú</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-lg font-semibold">Menú</h2>
+          {isMobile && <ThemeToggle />}
+        </div>
         <Button
           variant="ghost"
           size="icon"
@@ -190,7 +189,7 @@ export function Sidebar({
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                           {isOpenMenu && (
-                            <div className="absolute right-0 top-full mt-1 w-36 bg-white border border-gray-200 rounded-md shadow-md z-50 flex flex-col py-1">
+                            <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-md z-50 flex flex-col py-1">
                               <button
                                 className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
                                 onClick={() => handleSessionRename(session.session_id, session.title)}
@@ -259,7 +258,6 @@ export function Sidebar({
     </div>
   )
 
-  // Vista móvil: el overlay + sidebar expandido
   if (isMobile) {
     return (
       <div className={`fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}>
@@ -280,17 +278,13 @@ export function Sidebar({
     )
   }
 
-  // Vista escritorio:
-  // Se muestra un botón lateral fijo y el sidebar expandido se desliza cuando isOpen = true
   return (
     <>
-      {/* Botón pequeño lateral colapsado */}
       <div
         className={`fixed top-0 left-0 h-full w-16 bg-background shadow-lg z-50 flex flex-col justify-between transition-all duration-300 ${
           isOpen ? "hidden" : "translate-x-0"
         }`}
       >
-        {/* Botón para abrir el sidebar */}
         <Button
           variant="ghost"
           size="icon"
@@ -301,7 +295,6 @@ export function Sidebar({
           {isOpen ? <ChevronsLeft className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </Button>
 
-        {/* Botón "Nuevo chat" en modo colapsado */}
         <Button
           variant="ghost"
           size="icon"
@@ -317,7 +310,6 @@ export function Sidebar({
         </div>
       </div>
 
-      {/* Sidebar expandido */}
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-background shadow-lg z-40 transform transition-transform duration-300 ${
           isOpen ? "translate-x-0" : "-translate-x-full"

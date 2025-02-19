@@ -40,9 +40,8 @@ export default function ClientLayout({ children, hideLayout = false }: ClientLay
             </div>
 
             <div className={isMobile ? "flex items-center space-x-2" : "hidden md:flex items-center space-x-2"}>
-              {loading ? (
-                <span>Cargando...</span>
-              ) : (
+              {/* Eliminamos "Cargando..." y mostramos botones solo si no está cargando y no está autenticado */}
+              {!loading && !isAuthenticated && (
                 <>
                   <Link href="/auth/login">
                     <Button
