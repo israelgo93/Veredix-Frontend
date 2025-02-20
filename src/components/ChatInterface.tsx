@@ -642,14 +642,14 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                       blockquote: ({ children }) => (
                                         <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
                                       ),
-                                      code: ({ inline, children }: { inline?: boolean; children: React.ReactNode }) =>
+                                      code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
                                         inline ? (
                                           <code className={markdownStyles.code}>{children}</code>
                                         ) : (
                                           <pre className={markdownStyles.pre}>
                                             <code>{children}</code>
                                           </pre>
-                                        ),
+                                        ),                                      
                                       table: ({ children }) => (
                                         <div className="overflow-x-auto" style={{ width: "100%" }}>
                                           <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
@@ -670,9 +670,10 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                       hr: () => <hr className="my-6 border-border" />,
                                       img: (props) => {
                                         const { src, alt, width, height, ...rest } = props
+                                        if (!src) return null
                                         return (
                                           <Image
-                                            src={src}
+                                            src={src!}
                                             alt={alt || ""}
                                             width={width ? parseInt(width.toString(), 10) : 600}
                                             height={height ? parseInt(height.toString(), 10) : 400}
