@@ -49,7 +49,7 @@ const fetchUserSessions = async (userId: string): Promise<UserSession[]> => {
   if (!userId) return []
   try {
     const response = await fetch(
-      `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions?user_id=${userId}`,
+      `https://veredix.app/api/v1/playground/agents/veredix/sessions?user_id=${userId}`,
     )
     if (!response.ok) {
       throw new Error("Failed to fetch user sessions")
@@ -224,7 +224,7 @@ export function useChat() {
   const loadSession = async (chatId: string) => {
     try {
       const response = await fetch(
-        `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${chatId}?user_id=${currentUserId}`
+        `https://veredix.app/api/v1/playground/agents/veredix/sessions/${chatId}?user_id=${currentUserId}`
       )
 
       if (!response.ok) {
@@ -296,7 +296,7 @@ export function useChat() {
         abortControllerRef.current = new AbortController()
 
         const response = await fetch(
-          "http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/runs",
+          "https://veredix.app/api/v1/playground/agents/veredix/runs",
           {
             method: "POST",
             body: formData,
@@ -373,7 +373,7 @@ export function useChat() {
     if (currentUserId) {
       try {
         const response = await fetch(
-          `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${sessionId}?user_id=${currentUserId}`,
+          `https://veredix.app/api/v1/playground/agents/veredix/sessions/${sessionId}?user_id=${currentUserId}`,
           {
             method: "DELETE",
           },
@@ -397,7 +397,7 @@ export function useChat() {
     if (currentUserId) {
       try {
         const response = await fetch(
-          `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${sessionId}/rename`,
+          `https://veredix.app/api/v1/playground/agents/veredix/sessions/${sessionId}/rename`,
           {
             method: "POST",
             headers: {
