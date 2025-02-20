@@ -185,7 +185,7 @@ export function useChat() {
             jsonObjects.push(parsedResponse)
           }
           startIndex = endIndex
-        } catch (e) {
+        } catch {
           startIndex = openBraceIndex + 1
         }
       } else {
@@ -226,13 +226,13 @@ export function useChat() {
       const response = await fetch(
         `http://veredix.centralus.cloudapp.azure.com:7777/v1/playground/agents/veredix/sessions/${chatId}?user_id=${currentUserId}`
       )
-  
+
       if (!response.ok) {
         throw new Error("Failed to load session")
       }
-  
+
       const sessionData = await response.json()
-  
+
       const rawMessages = sessionData.memory?.messages || []
       const filteredMessages: Message[] = rawMessages
         .filter((msg: { role: "user" | "assistant"; content: string | null }) => {
@@ -243,13 +243,13 @@ export function useChat() {
           content: msg.content,
           status: "complete",
         }))
-  
+
       if (sessionData.memory?.extra_data?.references) {
         setSources(sessionData.memory.extra_data.references)
       } else if (sessionData.extra_data?.references) {
         setSources(sessionData.extra_data.references)
       }
-  
+
       setMessages(filteredMessages)
       setCurrentChatId(chatId)
       localStorage.setItem("currentChatId", chatId)

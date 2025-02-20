@@ -32,6 +32,7 @@ import { Sidebar } from "./Sidebar"
 import Link from "next/link"
 import { useAuth } from "../contexts/AuthContext"
 import { ThemeToggle } from "./theme-toggle"
+import Image from "next/image"
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -667,9 +668,20 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                         </td>
                                       ),
                                       hr: () => <hr className="my-6 border-border" />,
-                                      img: (props) => (
-                                        <img alt={props.alt || ""} {...props} className="rounded-lg border border-border max-w-full h-auto" />
-                                      ),
+                                      img: (props) => {
+                                        const { src, alt, width, height, ...rest } = props
+                                        return (
+                                          <Image
+                                            src={src}
+                                            alt={alt || ""}
+                                            width={width ? parseInt(width.toString(), 10) : 600}
+                                            height={height ? parseInt(height.toString(), 10) : 400}
+                                            {...rest}
+                                            className="rounded-lg border border-border max-w-full h-auto"
+                                            unoptimized
+                                          />
+                                        )
+                                      },
                                       strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
                                       em: ({ children }) => <em className="italic">{children}</em>,
                                     }}
@@ -850,3 +862,4 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     </div>
   )
 }
+
