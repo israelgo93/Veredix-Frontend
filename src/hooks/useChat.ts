@@ -1,3 +1,4 @@
+// chat-legal/src/hooks/useChat.ts
 "use client"
 
 import { useState, useCallback, useRef, useEffect } from "react"
@@ -6,24 +7,9 @@ import { getUserId } from "../lib/utils"
 import type { Session } from "@supabase/supabase-js"
 
 export interface Message {
-  role: "user" | "assistant"
+  role: "user" | "assistant" | "tool"
   content: string
   status?: "thinking" | "responding" | "complete"
-}
-
-export interface ExtraData {
-  references?: { references: Source[] }[]
-}
-
-export interface ApiResponse {
-  content: string
-  content_type: string
-  event: string
-  messages: Message[]
-  sources?: Source[]
-  extra_data?: ExtraData
-  session_id?: string
-  status?: "thinking" | "reasoning" | "completing"
 }
 
 export interface Source {
@@ -34,6 +20,23 @@ export interface Source {
   }
   name: string
   content: string
+}
+
+export interface ExtraData {
+  // No se utiliza para obtener fuentes
+  session_id?: string
+}
+
+export interface ApiResponse {
+  content: string
+  content_type: string
+  event: string
+  messages: Message[]
+  sources?: Source[]
+  extra_data?: ExtraData
+  session_id?: string
+  run_id?: string
+  status?: "thinking" | "reasoning" | "completing"
 }
 
 export interface UserSession {
@@ -49,7 +52,7 @@ const fetchUserSessions = async (userId: string): Promise<UserSession[]> => {
   if (!userId) return []
   try {
     const response = await fetch(
-      `https://veredix.app/api/v1/playground/agents/veredix/sessions?user_id=${userId}`,
+      `https://veredix.app/api/v1/playground/agents/veredix/sessions?user_id=${userId}`
     )
     if (!response.ok) {
       throw new Error("Failed to fetch user sessions")
@@ -70,11 +73,14 @@ export function useChat() {
   const [userSessions, setUserSessions] = useState<UserSession[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
+  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
   const [authSession, setAuthSession] = useState<Session | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentContentRef = useRef<string>("")
   const bufferRef = useRef<string>("")
+  // Conjunto para llevar control de los tool_call_id ya procesados
+  const processedToolIds = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     const checkSession = async () => {
@@ -133,8 +139,10 @@ export function useChat() {
 
   const createNewChat = useCallback(async () => {
     setCurrentChatId("")
+    setCurrentRunId(null)
     setMessages([])
     localStorage.removeItem("currentChatId")
+    processedToolIds.current.clear()
     if (authSession?.user) {
       const sessions = await fetchUserSessions(authSession.user.id)
       setUserSessions(sessions)
@@ -149,53 +157,46 @@ export function useChat() {
     }
   }, [currentUserId])
 
-  const processJsonObjects = useCallback((text: string): ApiResponse[] => {
-    const jsonObjects: ApiResponse[] = []
-    bufferRef.current += text
+  const processJsonObjects = useCallback(
+    (text: string): ApiResponse[] => {
+      const jsonObjects: ApiResponse[] = []
+      bufferRef.current += text
 
-    let startIndex = 0
-    while (true) {
-      const openBraceIndex = bufferRef.current.indexOf("{", startIndex)
-      if (openBraceIndex === -1) break
+      let startIndex = 0
+      while (true) {
+        const openBraceIndex = bufferRef.current.indexOf("{", startIndex)
+        if (openBraceIndex === -1) break
 
-      let braceCount = 1
-      let endIndex = openBraceIndex + 1
+        let braceCount = 1
+        let endIndex = openBraceIndex + 1
 
-      while (braceCount > 0 && endIndex < bufferRef.current.length) {
-        if (bufferRef.current[endIndex] === "{") braceCount++
-        if (bufferRef.current[endIndex] === "}") braceCount--
-        endIndex++
-      }
-
-      if (braceCount === 0) {
-        try {
-          const jsonString = bufferRef.current.slice(openBraceIndex, endIndex).trim()
-          const parsed = JSON.parse(jsonString)
-          const parsedResponse = parsed as ApiResponse
-          if (parsedResponse.extra_data && parsedResponse.extra_data.references && Array.isArray(parsedResponse.extra_data.references)) {
-            const flattenedSources: Source[] = []
-            parsedResponse.extra_data.references.forEach((refGroup: { references: Source[] }) => {
-              if (refGroup.references && Array.isArray(refGroup.references)) {
-                flattenedSources.push(...refGroup.references)
-              }
-            })
-            setSources(flattenedSources)
-          }
-          if (parsedResponse.event && parsedResponse.content !== undefined) {
-            jsonObjects.push(parsedResponse)
-          }
-          startIndex = endIndex
-        } catch {
-          startIndex = openBraceIndex + 1
+        while (braceCount > 0 && endIndex < bufferRef.current.length) {
+          if (bufferRef.current[endIndex] === "{") braceCount++
+          if (bufferRef.current[endIndex] === "}") braceCount--
+          endIndex++
         }
-      } else {
-        break
-      }
-    }
 
-    bufferRef.current = bufferRef.current.slice(startIndex)
-    return jsonObjects
-  }, [])
+        if (braceCount === 0) {
+          try {
+            const jsonString = bufferRef.current.slice(openBraceIndex, endIndex).trim()
+            const parsed = JSON.parse(jsonString) as ApiResponse
+            if (parsed.event && parsed.content !== undefined) {
+              jsonObjects.push(parsed)
+            }
+            startIndex = endIndex
+          } catch {
+            startIndex = openBraceIndex + 1
+          }
+        } else {
+          break
+        }
+      }
+
+      bufferRef.current = bufferRef.current.slice(startIndex)
+      return jsonObjects
+    },
+    []
+  )
 
   const updateAssistantMessage = useCallback(
     (content: string, status: "thinking" | "responding" | "complete" = "responding", regenerate = false) => {
@@ -218,7 +219,7 @@ export function useChat() {
         return newMessages
       })
     },
-    [],
+    []
   )
 
   const loadSession = async (chatId: string) => {
@@ -235,20 +236,18 @@ export function useChat() {
 
       const rawMessages = sessionData.memory?.messages || []
       const filteredMessages: Message[] = rawMessages
-        .filter((msg: { role: "user" | "assistant"; content: string | null }) => {
-          return ((msg.role === "user" || msg.role === "assistant") && msg.content != null)
+        .filter((msg: { role: "user" | "assistant" | "tool"; content: string | null }) => {
+          return ((msg.role === "user" || msg.role === "assistant" || msg.role === "tool") && msg.content != null)
         })
-        .map((msg: { role: "user" | "assistant"; content: string }) => ({
+        .map((msg: { role: "user" | "assistant" | "tool"; content: string }) => ({
           role: msg.role,
           content: msg.content,
           status: "complete",
         }))
 
-      if (sessionData.memory?.extra_data?.references) {
-        setSources(sessionData.memory.extra_data.references)
-      } else if (sessionData.extra_data?.references) {
-        setSources(sessionData.extra_data.references)
-      }
+      // Se elimina la lógica que usaba extra_data.references para obtener fuentes
+      setSources([])
+      processedToolIds.current.clear()
 
       setMessages(filteredMessages)
       setCurrentChatId(chatId)
@@ -301,7 +300,7 @@ export function useChat() {
             method: "POST",
             body: formData,
             signal: abortControllerRef.current.signal,
-          },
+          }
         )
 
         if (!response.ok) {
@@ -335,11 +334,45 @@ export function useChat() {
               if (parsedData.session_id) {
                 setCurrentChatId(parsedData.session_id)
                 localStorage.setItem("currentChatId", parsedData.session_id)
+                if (parsedData.run_id) {
+                  setCurrentRunId(parsedData.run_id)
+                }
                 if (authSession?.user) {
                   const sessions = await fetchUserSessions(authSession.user.id)
                   setUserSessions(sessions)
                 }
               }
+            }
+            // Procesa mensajes con role "tool" para obtener las fuentes y acumularlas sin duplicar (filtrado por tool_call_id)
+            if (parsedData.messages && Array.isArray(parsedData.messages)) {
+              parsedData.messages.forEach((msg) => {
+                if (msg.role === "tool") {
+                  const toolId = msg.tool_call_id
+                  if (toolId) {
+                    if (!processedToolIds.current.has(toolId)) {
+                      processedToolIds.current.add(toolId)
+                      try {
+                        const parsedSources = JSON.parse(msg.content)
+                        if (Array.isArray(parsedSources)) {
+                          setSources(prevSources => [...prevSources, ...parsedSources])
+                        }
+                      } catch (err) {
+                        console.error("Error parsing tool message content for sources:", err)
+                      }
+                    }
+                  } else {
+                    // Si no tiene tool_call_id, se procesa normalmente
+                    try {
+                      const parsedSources = JSON.parse(msg.content)
+                      if (Array.isArray(parsedSources)) {
+                        setSources(prevSources => [...prevSources, ...parsedSources])
+                      }
+                    } catch (err) {
+                      console.error("Error parsing tool message content for sources:", err)
+                    }
+                  }
+                }
+              })
             }
           }
         }
@@ -349,7 +382,7 @@ export function useChat() {
           updateAssistantMessage(
             currentContentRef.current + "\n\n[Mensaje interrumpido por el usuario]",
             "complete",
-            regenerate,
+            regenerate
           )
         } else {
           console.error("Error in sendMessage:", error)
@@ -360,7 +393,7 @@ export function useChat() {
         setCanStopResponse(false)
       }
     },
-    [currentUserId, currentChatId, authSession, createNewChat, processJsonObjects, updateAssistantMessage],
+    [currentUserId, currentChatId, authSession, createNewChat, processJsonObjects, updateAssistantMessage]
   )
 
   const cancelRequest = useCallback(() => {
@@ -376,7 +409,7 @@ export function useChat() {
           `https://veredix.app/api/v1/playground/agents/veredix/sessions/${sessionId}?user_id=${currentUserId}`,
           {
             method: "DELETE",
-          },
+          }
         )
         if (!response.ok) {
           throw new Error("Failed to delete session")
@@ -407,7 +440,7 @@ export function useChat() {
               name: newTitle,
               user_id: currentUserId,
             }),
-          },
+          }
         )
         if (!response.ok) {
           throw new Error("Failed to rename session")

@@ -84,7 +84,7 @@ export function Sidebar({
       {/* Encabezado con ThemeToggle en vista móvil */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold">Menú</h2>
+          <h2 className="text-lg font-semibold">Veredix</h2>
           {isMobile && <ThemeToggle />}
         </div>
         <Button

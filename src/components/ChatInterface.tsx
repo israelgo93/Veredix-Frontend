@@ -797,6 +797,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           onSessionSelect={(sessionId: string) => {
             loadSession(sessionId)
               .then(() => {
+                setIsInitialView(false)
                 if (isMobile) {
                   setSidebarOpen(false)
                 }
@@ -863,4 +864,3 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     </div>
   )
 }
-
