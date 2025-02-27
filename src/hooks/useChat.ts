@@ -7,9 +7,18 @@ import { getUserId } from "../lib/utils"
 import type { Session } from "@supabase/supabase-js"
 
 export interface Message {
-  role: "user" | "assistant" | "tool"
+  role: "user" | "assistant"
   content: string
   status?: "thinking" | "responding" | "complete"
+  tool_call_id?: string
+}
+
+export interface ToolMessage {
+  role: "tool"
+  content: string
+  tool_call_id?: string
+  session_id?: string
+  [key: string]: unknown
 }
 
 export interface Source {
@@ -31,11 +40,14 @@ export interface ApiResponse {
   content: string
   content_type: string
   event: string
-  messages: Message[]
+  model?: string
+  run_id?: string
+  agent_id?: string
+  session_id?: string
+  created_at?: number
+  messages: Array<Message | ToolMessage>
   sources?: Source[]
   extra_data?: ExtraData
-  session_id?: string
-  run_id?: string
   status?: "thinking" | "reasoning" | "completing"
 }
 
@@ -73,13 +85,13 @@ export function useChat() {
   const [userSessions, setUserSessions] = useState<UserSession[]>([])
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
-  const [currentRunId, setCurrentRunId] = useState<string | null>(null)
+  // Eliminamos currentRunId porque no se utiliza
   const [authSession, setAuthSession] = useState<Session | null>(null)
 
   const abortControllerRef = useRef<AbortController | null>(null)
   const currentContentRef = useRef<string>("")
   const bufferRef = useRef<string>("")
-  // Conjunto para llevar control de los tool_call_id ya procesados
+  // Set para llevar control de los tool_call_id ya procesados
   const processedToolIds = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -139,8 +151,8 @@ export function useChat() {
 
   const createNewChat = useCallback(async () => {
     setCurrentChatId("")
-    setCurrentRunId(null)
     setMessages([])
+    setSources([]) // Se limpia el estado de las fuentes al iniciar un nuevo chat
     localStorage.removeItem("currentChatId")
     processedToolIds.current.clear()
     if (authSession?.user) {
@@ -157,6 +169,10 @@ export function useChat() {
     }
   }, [currentUserId])
 
+  /**
+   * Recibe un chunk de texto, lo concatena a bufferRef, y
+   * extrae objetos JSON válidos devolviéndolos como ApiResponse[].
+   */
   const processJsonObjects = useCallback(
     (text: string): ApiResponse[] => {
       const jsonObjects: ApiResponse[] = []
@@ -198,6 +214,10 @@ export function useChat() {
     []
   )
 
+  /**
+   * Actualiza el último mensaje "assistant" con el contenido acumulado,
+   * o crea uno nuevo si no existe. Se omite el role "tool" de la conversación.
+   */
   const updateAssistantMessage = useCallback(
     (content: string, status: "thinking" | "responding" | "complete" = "responding", regenerate = false) => {
       setMessages((prev) => {
@@ -222,6 +242,12 @@ export function useChat() {
     []
   )
 
+  /**
+   * Carga la sesión con el chatId dado:
+   * 1. Filtra los mensajes "assistant" y "user" para mostrarlos en la conversación.
+   * 2. Procesa los mensajes "tool" para extraer fuentes (evitando duplicados con tool_call_id)
+   *    y solo si el session_id (del mensaje o del objeto) coincide con el chatId.
+   */
   const loadSession = async (chatId: string) => {
     try {
       const response = await fetch(
@@ -233,23 +259,63 @@ export function useChat() {
       }
 
       const sessionData = await response.json()
+      const rawMessages = (sessionData.memory?.messages || []) as Array<Message | ToolMessage>
 
-      const rawMessages = sessionData.memory?.messages || []
-      const filteredMessages: Message[] = rawMessages
-        .filter((msg: { role: "user" | "assistant" | "tool"; content: string | null }) => {
-          return ((msg.role === "user" || msg.role === "assistant" || msg.role === "tool") && msg.content != null)
-        })
-        .map((msg: { role: "user" | "assistant" | "tool"; content: string }) => ({
-          role: msg.role,
-          content: msg.content,
-          status: "complete",
-        }))
-
-      // Se elimina la lógica que usaba extra_data.references para obtener fuentes
+      // Reiniciamos las fuentes y el conjunto de tool_call_id
       setSources([])
       processedToolIds.current.clear()
 
-      setMessages(filteredMessages)
+      // 1. Mensajes de conversación (user / assistant)
+      const conversationMessages: Message[] = rawMessages
+        .filter(
+          (msg) =>
+            (msg.role === "user" || msg.role === "assistant") && msg.content != null
+        )
+        .map((msg) => ({
+          role: msg.role as "user" | "assistant",
+          content: msg.content,
+          status: "complete",
+          tool_call_id: msg.tool_call_id,
+        }))
+
+      // 2. Mensajes "tool": se procesan para extraer fuentes, usando chatId para filtrar
+      const toolMessages = rawMessages.filter(
+        (msg): msg is ToolMessage => msg.role === "tool" && msg.content != null
+      )
+      toolMessages.forEach((msg) => {
+        // Se toma el session_id del mensaje o del top-level de la sesión
+        const topLevelSession = sessionData?.session_id || sessionData?.memory?.session_id
+        const toolSessionId = msg.session_id || topLevelSession
+        // Filtramos usando el parámetro chatId (la sesión que se está cargando)
+        if (chatId && toolSessionId && toolSessionId !== chatId) {
+          return
+        }
+        const toolId = msg.tool_call_id
+        if (toolId) {
+          if (!processedToolIds.current.has(toolId)) {
+            processedToolIds.current.add(toolId)
+            try {
+              const parsedSources = JSON.parse(msg.content) as Source[]
+              if (Array.isArray(parsedSources)) {
+                setSources((prev) => [...prev, ...parsedSources])
+              }
+            } catch (err) {
+              console.error("Error parsing tool message content for sources in session:", err)
+            }
+          }
+        } else {
+          try {
+            const parsedSources = JSON.parse(msg.content) as Source[]
+            if (Array.isArray(parsedSources)) {
+              setSources((prev) => [...prev, ...parsedSources])
+            }
+          } catch (err) {
+            console.error("Error parsing tool message content for sources in session:", err)
+          }
+        }
+      })
+
+      setMessages(conversationMessages)
       setCurrentChatId(chatId)
       localStorage.setItem("currentChatId", chatId)
     } catch (error) {
@@ -258,6 +324,11 @@ export function useChat() {
     }
   }
 
+  /**
+   * Envía un mensaje al agente y procesa las respuestas en streaming.
+   * Se omiten los mensajes "tool" en la conversación, pero se extraen sus fuentes
+   * únicamente si el session_id (del mensaje o del objeto) coincide con currentChatId.
+   */
   const sendMessage = useCallback(
     async (message: string, regenerate = false) => {
       try {
@@ -323,10 +394,13 @@ export function useChat() {
           const jsonObjects = processJsonObjects(chunk)
 
           for (const parsedData of jsonObjects) {
+            // 1. Actualiza el contenido del mensaje "assistant"
             if (parsedData.event === "RunResponse" && parsedData.content) {
               currentContentRef.current += parsedData.content
               updateAssistantMessage(currentContentRef.current, "responding", regenerate)
-            } else if (parsedData.event === "RunCompleted") {
+            }
+            // 2. Cuando se completa la respuesta
+            else if (parsedData.event === "RunCompleted") {
               if (parsedData.content) {
                 currentContentRef.current = parsedData.content
               }
@@ -335,7 +409,8 @@ export function useChat() {
                 setCurrentChatId(parsedData.session_id)
                 localStorage.setItem("currentChatId", parsedData.session_id)
                 if (parsedData.run_id) {
-                  setCurrentRunId(parsedData.run_id)
+                  // Si se requiere, se puede almacenar el run_id, pero no se utiliza en la interfaz
+                  // setCurrentRunId(parsedData.run_id)
                 }
                 if (authSession?.user) {
                   const sessions = await fetchUserSessions(authSession.user.id)
@@ -343,29 +418,33 @@ export function useChat() {
                 }
               }
             }
-            // Procesa mensajes con role "tool" para obtener las fuentes y acumularlas sin duplicar (filtrado por tool_call_id)
+            // 3. Procesa los mensajes "tool" para extraer fuentes
             if (parsedData.messages && Array.isArray(parsedData.messages)) {
-              parsedData.messages.forEach((msg) => {
-                if (msg.role === "tool") {
+              (parsedData.messages as Array<ToolMessage>).forEach((msg) => {
+                if (msg.role === "tool" && msg.content) {
+                  const topLevelSessionId = parsedData.session_id
+                  const toolSessionId = msg.session_id || topLevelSessionId
+                  if (currentChatId && toolSessionId && toolSessionId !== currentChatId) {
+                    return
+                  }
                   const toolId = msg.tool_call_id
                   if (toolId) {
                     if (!processedToolIds.current.has(toolId)) {
                       processedToolIds.current.add(toolId)
                       try {
-                        const parsedSources = JSON.parse(msg.content)
+                        const parsedSources = JSON.parse(msg.content) as Source[]
                         if (Array.isArray(parsedSources)) {
-                          setSources(prevSources => [...prevSources, ...parsedSources])
+                          setSources((prevSources) => [...prevSources, ...parsedSources])
                         }
                       } catch (err) {
                         console.error("Error parsing tool message content for sources:", err)
                       }
                     }
                   } else {
-                    // Si no tiene tool_call_id, se procesa normalmente
                     try {
-                      const parsedSources = JSON.parse(msg.content)
+                      const parsedSources = JSON.parse(msg.content) as Source[]
                       if (Array.isArray(parsedSources)) {
-                        setSources(prevSources => [...prevSources, ...parsedSources])
+                        setSources((prevSources) => [...prevSources, ...parsedSources])
                       }
                     } catch (err) {
                       console.error("Error parsing tool message content for sources:", err)
@@ -470,3 +549,4 @@ export function useChat() {
     createNewChat,
   }
 }
+
