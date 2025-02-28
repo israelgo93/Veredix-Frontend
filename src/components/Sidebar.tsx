@@ -25,6 +25,7 @@ interface SidebarProps {
   isMobile: boolean
   isAuthenticated?: boolean
   userName?: string
+  userEmail?: string
   onNewChat?: () => void
   onLogout?: () => void
   onLogin?: () => void
@@ -35,20 +36,23 @@ interface SidebarProps {
   currentSessionId?: string | null
 }
 
-export function Sidebar({
-  isOpen,
-  onClose,
-  toggleSidebar,
-  isMobile,
-  isAuthenticated,
-  onNewChat,
-  onLogout,
-  sessions = [],
-  onSessionSelect,
-  onSessionDelete,
-  onSessionRename,
-  currentSessionId,
-}: SidebarProps) {
+export function Sidebar(props: SidebarProps) {
+  // Extraemos únicamente las propiedades que se utilizan en el componente.
+  const {
+    isOpen,
+    onClose,
+    toggleSidebar,
+    isMobile,
+    isAuthenticated,
+    onNewChat,
+    onLogout,
+    sessions = [],
+    onSessionSelect,
+    onSessionDelete,
+    onSessionRename,
+    currentSessionId,
+  } = props
+
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null)
   const [newSessionName, setNewSessionName] = useState("")
   const [openMenuSessionId, setOpenMenuSessionId] = useState<string | null>(null)
@@ -81,7 +85,7 @@ export function Sidebar({
 
   const sidebarContent = (
     <div className="relative h-full flex flex-col">
-      {/* Encabezado con ThemeToggle en vista móvil */}
+      {/* Encabezado */}
       <div className="flex items-center justify-between p-4 border-b border-border">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">Veredix</h2>
@@ -98,24 +102,25 @@ export function Sidebar({
         </Button>
       </div>
 
-      {/* Botón Nuevo Chat */}
-      <div className="p-4">
-        <Button
-          variant="outline"
-          size="sm"
+      {/* Botón “Nuevo Chat” */}
+      <div className="p-4 border-b border-border">
+        <button
           onClick={handleNewChat}
-          className="w-full rounded-full px-3 py-2 border border-gray-300 text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+          className="w-full flex items-center justify-center gap-2 rounded-md py-2 text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+          aria-label="Nuevo chat"
         >
           <MessageSquare className="h-4 w-4" />
           <span>Nuevo chat</span>
-        </Button>
+        </button>
       </div>
 
       {/* Lista de sesiones */}
       <nav className="flex-1 overflow-y-auto p-4 space-y-4 text-sm overflow-x-hidden">
         {isAuthenticated && sessions && sessions.length > 0 && (
           <div className="mt-2">
-            <h3 className="text-xs font-bold uppercase mb-2 text-muted-foreground">Chats recientes</h3>
+            <h3 className="text-xs font-bold uppercase mb-2 text-muted-foreground">
+              Chats recientes
+            </h3>
             <ul className="space-y-1">
               {sessions.map((session) => {
                 const isEditing = editingSessionId === session.session_id
@@ -174,7 +179,6 @@ export function Sidebar({
                             {displayTitle}
                           </span>
                         </button>
-
                         <div className="relative">
                           <Button
                             variant="ghost"
@@ -190,10 +194,12 @@ export function Sidebar({
                             <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-md z-50 flex flex-col py-1">
                               <button
                                 className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
-                                onClick={() => handleSessionRename(session.session_id, session.title)}
+                                onClick={() =>
+                                  handleSessionRename(session.session_id, session.title)
+                                }
                               >
                                 <Edit className="h-4 w-4" />
-                                <span>Cambiar nombre</span>
+                                <span>Renombrar</span>
                               </button>
                               <button
                                 className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-gray-100"
@@ -215,43 +221,39 @@ export function Sidebar({
         )}
       </nav>
 
-      {/* Botón Cerrar Sesión fijo al fondo */}
-      <div className="absolute bottom-0 w-full p-4 border-t border-border bg-background">
-        {!isAuthenticated ? (
+      {/* Parte inferior: Cerrar Sesión o Iniciar/Registrar */}
+      <div className="border-t border-border p-4 bg-background">
+        {isAuthenticated ? (
+          <button
+            onClick={onLogout}
+            className="w-full flex items-center justify-center gap-2 rounded-md py-2 text-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all"
+            aria-label="Cerrar sesión"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Cerrar Sesión</span>
+          </button>
+        ) : (
           <div className="flex flex-col gap-2">
             <Link href="/auth/login">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full rounded-full px-3 py-2 border border-gray-300 text-sm bg-background text-foreground hover:bg-accent transition-all flex items-center justify-center gap-2"
+              <button
+                className="w-full flex items-center justify-center gap-2 rounded-md py-2 text-sm border border-gray-300 bg-background text-foreground hover:bg-accent transition-all"
+                aria-label="Iniciar Sesión"
               >
-                <LogIn className="w-4 h-4" />
+                <LogIn className="h-4 w-4" />
                 <span>Iniciar Sesión</span>
-              </Button>
+              </button>
             </Link>
             <Link href="/auth/signup">
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-full rounded-full px-3 py-2 border border-gray-300 text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-all flex items-center justify-center gap-2"
+              <button
+                className="w-full flex items-center justify-center gap-2 rounded-md py-2 text-sm border border-gray-300 bg-primary text-primary-foreground hover:bg-primary/90 transition-all"
+                aria-label="Registrarse"
               >
-                <UserPlus className="w-4 h-4" />
+                <UserPlus className="h-4 w-4" />
                 <span>Registrarse</span>
-              </Button>
+              </button>
             </Link>
           </div>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onLogout}
-            className="w-full rounded-full px-3 py-2 border border-gray-300 text-sm bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-all flex items-center justify-center gap-2"
-          >
-            <LogOut className="w-4 h-4" />
-            <span>Cerrar Sesión</span>
-          </Button>
         )}
-        <div className="pt-2 text-xs text-center text-muted-foreground">© 2025 Chat Legal IA</div>
       </div>
     </div>
   )
@@ -279,7 +281,7 @@ export function Sidebar({
   return (
     <>
       <div
-        className={`fixed top-0 left-0 h-full w-16 bg-background shadow-lg z-50 flex flex-col justify-between transition-all duration-300 ${
+        className={`fixed top-0 left-0 h-full w-16 bg-background shadow-lg z-50 flex flex-col transition-all duration-300 ${
           isOpen ? "hidden" : "translate-x-0"
         }`}
       >
@@ -292,22 +294,55 @@ export function Sidebar({
         >
           {isOpen ? <ChevronsLeft className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
         </Button>
-
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleNewChat}
-          aria-label="Nuevo chat"
-          className="m-2 transition-transform duration-200 hover:scale-105 active:scale-95"
-        >
-          <MessageSquare className="h-6 w-6" />
-        </Button>
-
-        <div className="m-2 mt-auto">
+        <div className="mx-2 mt-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleNewChat}
+            aria-label="Nuevo chat"
+            className="transition-transform duration-200 hover:scale-105 active:scale-95"
+          >
+            <MessageSquare className="h-6 w-6" />
+          </Button>
+        </div>
+        <div className="mt-auto mb-4 flex flex-col items-center">
+          {isAuthenticated ? (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onLogout}
+              aria-label="Cerrar sesión"
+              className="mb-2 transition-transform duration-200 hover:scale-105 active:scale-95"
+            >
+              <LogOut className="h-6 w-6" />
+            </Button>
+          ) : (
+            <div className="flex flex-col items-center gap-2 mb-2">
+              <Link href="/auth/login">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Iniciar sesión"
+                  className="transition-transform duration-200 hover:scale-105 active:scale-95"
+                >
+                  <LogIn className="h-6 w-6" />
+                </Button>
+              </Link>
+              <Link href="/auth/signup">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Registrarse"
+                  className="transition-transform duration-200 hover:scale-105 active:scale-95"
+                >
+                  <UserPlus className="h-6 w-6" />
+                </Button>
+              </Link>
+            </div>
+          )}
           <ThemeToggle />
         </div>
       </div>
-
       <div
         className={`fixed top-0 left-0 h-full w-64 bg-background shadow-lg z-40 transform transition-transform duration-300 ${
           isOpen ? "translate-x-0" : "-translate-x-full"
@@ -318,3 +353,4 @@ export function Sidebar({
     </>
   )
 }
+

@@ -1,6 +1,14 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback, type FormEvent, type KeyboardEvent, type ChangeEvent } from "react"
+import {
+  useState,
+  useEffect,
+  useRef,
+  useCallback,
+  type FormEvent,
+  type KeyboardEvent,
+  type ChangeEvent,
+} from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
@@ -25,8 +33,18 @@ import rehypeRaw from "rehype-raw"
 import { useChat, type Source } from "../hooks/useChat"
 //import { useTheme } from "next-themes"
 import AutoResizingTextarea from "./AutoResizingTextarea"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { QuickActions } from "./QuickActions"
 import { Sidebar } from "./Sidebar"
 import Link from "next/link"
@@ -56,18 +74,35 @@ const markdownStyles = {
   ol: "list-decimal list-inside mb-3 space-y-1 [&>li]:mt-1",
   li: "leading-relaxed [&>p]:inline [&>ul]:mt-2 [&>ol]:mt-2",
   a: "font-medium underline underline-offset-4 decoration-primary/50 hover:decoration-primary transition-colors",
-  blockquote: "mt-4 border-l-4 border-primary/20 pl-4 italic [&>p]:text-muted-foreground",
+  blockquote:
+    "mt-4 border-l-4 border-primary/20 pl-4 italic [&>p]:text-muted-foreground",
   code: "relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-xs md:text-sm",
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
-const ThinkingIndicator = () => (
-  <div className="inline-flex items-center gap-2 px-3 py-2">
-    <span className="align-middle text-sm font-medium animate-pulse bg-gradient-to-r from-gray-400 to-gray-600 bg-clip-text text-transparent">
-      Pensando
-    </span>
-  </div>
-)
+/* Nuevo componente que cicla varias animaciones mientras se procesa la respuesta */
+const multiStages = [
+  "Pensando",
+  "Razonando",
+  "Analizando",
+  "Preparando respuesta",
+]
+const MultiStageIndicator = () => {
+  const [stageIndex, setStageIndex] = useState(0)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStageIndex((prev) => (prev + 1) % multiStages.length)
+    }, 2000) // Cambia de etapa cada 2 segundos
+    return () => clearInterval(interval)
+  }, [])
+  return (
+    <div className="inline-flex items-center gap-2 px-3 py-2">
+      <span className="align-middle text-sm font-medium animate-pulse bg-gradient-to-r from-gray-400 to-gray-600 bg-clip-text text-transparent">
+        {multiStages[stageIndex]}
+      </span>
+    </div>
+  )
+}
 
 interface SourceAccordionProps {
   source: Source
@@ -75,14 +110,21 @@ interface SourceAccordionProps {
 
 const SourceAccordion = ({ source }: SourceAccordionProps) => {
   const [expanded, setExpanded] = useState(false)
-  const summary = source.content.length > 100 ? source.content.slice(0, 100).trim() + "..." : source.content
+  const summary =
+    source.content.length > 100
+      ? source.content.slice(0, 100).trim() + "..."
+      : source.content
 
   return (
     <div className="border-b border-border pb-2 mb-2">
       <div className="flex items-center justify-between">
         <div>
-          <span className="font-semibold text-xs md:text-sm">{source.name}</span>
-          <span className="ml-2 text-xs text-muted-foreground">Página {source.meta_data?.page || "N/A"}</span>
+          <span className="font-semibold text-xs md:text-sm">
+            {source.name}
+          </span>
+          <span className="ml-2 text-xs text-muted-foreground">
+            Página {source.meta_data?.page || "N/A"}
+          </span>
         </div>
         <Button
           variant="ghost"
@@ -145,11 +187,13 @@ const MessageActions = ({
         url = `https://twitter.com/intent/tweet?text=${text}`
         break
       case "facebook":
-        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}&quote=${text}`
+        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+          window.location.href
+        )}&quote=${text}`
         break
       case "linkedin":
         url = `https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(
-          window.location.href,
+          window.location.href
         )}&title=Respuesta del Asistente Legal IA&summary=${text}`
         break
       case "whatsapp":
@@ -212,10 +256,18 @@ const MessageActions = ({
             </TooltipContent>
           </Tooltip>
           <DropdownMenuContent>
-            <DropdownMenuItem onClick={() => handleShare("twitter")}>Twitter</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleShare("facebook")}>Facebook</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleShare("linkedin")}>LinkedIn</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleShare("whatsapp")}>WhatsApp</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleShare("twitter")}>
+              Twitter
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleShare("facebook")}>
+              Facebook
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleShare("linkedin")}>
+              LinkedIn
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleShare("whatsapp")}>
+              WhatsApp
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -261,9 +313,15 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
 
   return (
     <div className="fixed inset-0 z-[999999] overflow-hidden">
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={onClose} />
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div ref={drawerRef} className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative">
+        <div
+          ref={drawerRef}
+          className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative"
+        >
           <button
             onClick={onClose}
             className="absolute top-2 right-2 z-[10000] rounded-md p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition-transform duration-200 hover:scale-105 active:scale-95"
@@ -300,14 +358,12 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     isLoading,
     sources,
     userSessions,
-    //currentUserId,
     currentChatId,
     loadSession,
     createNewChat,
     deleteSession,
     renameSession,
   } = useChat()
-  //const { theme } = useTheme()
   const { isAuthenticated, user, logout } = useAuth()
   const [isInitialView, setIsInitialView] = useState(true)
   const [input, setInput] = useState("")
@@ -322,7 +378,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const isScrollingRef = useRef(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
-  //const [setChatStarted] = useState(false)
 
   useEffect(() => {
     console.log("ChatInterface mounted")
@@ -333,8 +388,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
 
   useEffect(() => {
     if (!isInitialView) {
-      //console.log("Chat started")
-      //setChatStarted(true)
       onChatStarted?.()
     }
   }, [isInitialView, onChatStarted])
@@ -450,8 +503,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     }
   }
 
-  // Activamos el modal si el usuario no está autenticado
-  // De lo contrario, creamos el nuevo chat directamente
   const handleNewChatRequest = async () => {
     if (!isAuthenticated) {
       setShowNewChatModal(true)
@@ -463,9 +514,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     onNewChat?.()
   }
 
-  // Determina si mostrar el header móvil:
-  //  - isMobile
-  //  - Y (usuario autenticado O ya inició la conversación)
   const showMobileHeader = isMobile && (isAuthenticated || !isInitialView)
 
   return (
@@ -478,7 +526,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         <div className="absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
       </div>
 
-      {/* Header móvil: se muestra si el usuario está en móvil Y (está autenticado o ya inició el chat) */}
+      {/* Header móvil */}
       {showMobileHeader && (
         <header className="fixed top-0 left-0 right-0 h-16 flex items-center px-3 bg-white dark:bg-gray-900 shadow-md z-50 justify-between">
           <div>
@@ -615,7 +663,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                               }`}
                             >
                               {message.role === "assistant" && showThinking ? (
-                                <ThinkingIndicator />
+                                <MultiStageIndicator />
                               ) : (
                                 <div className="prose prose-neutral dark:prose-invert max-w-full overflow-x-hidden text-xs sm:text-sm md:text-base">
                                   <ReactMarkdown
@@ -683,7 +731,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                           />
                                         )
                                       },
-                                      strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+                                      strong: ({ children }) => (
+                                        <strong className="font-semibold">{children}</strong>
+                                      ),
                                       em: ({ children }) => <em className="italic">{children}</em>,
                                     }}
                                   >
@@ -774,17 +824,19 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />
       )}
 
-      {/* Sidebar:
-          - Usuarios autenticados => siempre.
-          - No autenticados => sólo tras iniciar conversación (isInitialView === false). */}
-      {(isAuthenticated || (!isAuthenticated && !isInitialView)) && (
+      {/* Renderizado del Sidebar:
+            - Para usuarios autenticados: siempre se muestra.
+            - Para usuarios no autenticados: se muestra solo si ya se ha iniciado el chat (isInitialView === false).
+      */}
+      {isAuthenticated ? (
         <Sidebar
           isOpen={sidebarOpen}
           toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
           onClose={() => setSidebarOpen(false)}
           isMobile={isMobile}
           isAuthenticated={isAuthenticated}
-          userName={user?.email || ""}
+          userName={user?.user_metadata?.full_name || user?.email || ""}
+          userEmail={user?.email || ""}
           onNewChat={handleNewChatRequest}
           onLogout={() => {
             logout()
@@ -809,7 +861,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           onSessionDelete={(sessionId: string) => {
             deleteSession(sessionId)
               .then(() => {
-                // Recargamos la interfaz principal
                 window.location.reload()
               })
               .catch((error) => {
@@ -818,24 +869,70 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
           }}
           onSessionRename={(sessionId: string, newName: string) => {
             renameSession(sessionId, newName)
-              .then(() => {
-                // Acciones opcionales
-              })
+              .then(() => {})
               .catch((error) => {
                 console.error("Error renaming session:", error)
               })
           }}
         />
+      ) : (
+        !isInitialView && (
+          <Sidebar
+            isOpen={sidebarOpen}
+            toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+            onClose={() => setSidebarOpen(false)}
+            isMobile={isMobile}
+            isAuthenticated={isAuthenticated}
+            userName={user?.user_metadata?.full_name || user?.email || ""}
+            userEmail={user?.email || ""}
+            onNewChat={handleNewChatRequest}
+            onLogout={() => {
+              logout()
+                .then(() => window.location.reload())
+                .catch((error) => console.error("Error on logout:", error))
+            }}
+            onLogin={() => {}}
+            sessions={userSessions}
+            currentSessionId={currentChatId}
+            onSessionSelect={(sessionId: string) => {
+              loadSession(sessionId)
+                .then(() => {
+                  setIsInitialView(false)
+                  if (isMobile) {
+                    setSidebarOpen(false)
+                  }
+                })
+                .catch((error) => {
+                  console.error("Error loading session:", error)
+                })
+            }}
+            onSessionDelete={(sessionId: string) => {
+              deleteSession(sessionId)
+                .then(() => {
+                  window.location.reload()
+                })
+                .catch((error) => {
+                  console.error("Error deleting session:", error)
+                })
+            }}
+            onSessionRename={(sessionId: string, newName: string) => {
+              renameSession(sessionId, newName)
+                .then(() => {})
+                .catch((error) => {
+                  console.error("Error renaming session:", error)
+                })
+            }}
+          />
+        )
       )}
-
+      
       {/* Modal de advertencia para usuarios no autenticados al iniciar nuevo chat */}
       {showNewChatModal && !isAuthenticated && (
         <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-md w-full mx-4">
             <h3 className="text-lg font-bold mb-4">¿Quieres borrar el chat actual?</h3>
             <p className="text-sm mb-6">
-              Tu conversación actual se descartará al iniciar un nuevo chat. Suscríbete o inicia sesión para guardar los
-              chats.
+              Tu conversación actual se descartará al iniciar un nuevo chat. Suscríbete o inicia sesión para guardar los chats.
             </p>
             <div className="flex flex-col gap-4">
               <Button
