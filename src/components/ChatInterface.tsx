@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import {
-  Paperclip,
+  //Paperclip,
   ArrowUp,
   ArrowDown,
   Copy,
@@ -26,6 +26,7 @@ import {
   Menu,
   ChevronsLeft,
   ChevronsRight,
+  Mic,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -571,41 +572,43 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
               <h2 className="text-2xl md:text-3xl font-semibold text-center mb-6 md:mb-8">
                 ¿En qué puedo ayudarte hoy?
               </h2>
-              <Card className="p-0 shadow-lg mx-auto w-full bg-white dark:bg-gray-800 backdrop-blur-sm">
+              <Card className="p-0 shadow-lg mx-auto w-full bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm border-0 rounded-2xl">
                 <form onSubmit={handleSubmit} className="relative">
                   <div className="flex flex-col p-3 md:p-4">
-                    <AutoResizingTextarea
-                      value={input}
-                      onChange={handleInputChange}
-                      placeholder="Escribe tu consulta legal aquí..."
-                      onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault()
-                          handleSubmit(e)
-                        }
-                      }}
-                      autoFocus
-                      ref={textareaRef}
-                      className="min-h-[60px] md:min-h-[100px]"
-                    />
-                    <div className="flex items-center justify-end gap-2 mt-3 md:mt-4">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                        disabled={!input.trim()}
-                      >
-                        <Paperclip className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="submit"
-                        size="icon"
-                        className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                        disabled={isLoading || !input.trim()}
-                      >
-                        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-                      </Button>
+                    <div className="relative">
+                      <AutoResizingTextarea
+                        value={input}
+                        onChange={handleInputChange}
+                        placeholder="Escribe tu consulta legal aquí..."
+                        onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault()
+                            handleSubmit(e)
+                          }
+                        }}
+                        autoFocus
+                        ref={textareaRef}
+                        className="min-h-[60px] md:min-h-[80px] pr-16 pl-5 py-4"
+                      />
+                      <div className="absolute right-2 bottom-2 flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
+                          disabled={!input.trim()}
+                        >
+                          <Mic className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="submit"
+                          size="icon"
+                          className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95 bg-primary/90 hover:bg-primary"
+                          disabled={isLoading || !input.trim()}
+                        >
+                          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </form>
@@ -763,7 +766,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
 
             <div className="bg-white dark:bg-gray-900">
               <div className="max-w-3xl mx-auto px-3 md:px-4 py-3 md:py-4">
-                <Card className="p-0 shadow-lg mx-auto w-full bg-white dark:bg-gray-800 backdrop-blur-sm rounded-xl border-0 relative">
+                <Card className="p-0 shadow-lg mx-auto w-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl border-0 relative">
                   <div className="relative flex flex-col gap-2 p-3 md:p-4">
                     {showScrollButton && (
                       <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 z-50">
@@ -777,38 +780,40 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                       </div>
                     )}
                     <form onSubmit={handleSubmit} className="relative flex flex-col gap-2">
-                      <AutoResizingTextarea
-                        value={input}
-                        onChange={handleInputChange}
-                        placeholder="Escribe tu consulta legal aquí..."
-                        onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
-                          if (e.key === "Enter" && !e.shiftKey) {
-                            e.preventDefault()
-                            handleSubmit(e)
-                          }
-                        }}
-                        autoFocus
-                        ref={textareaRef}
-                        className="min-h-[60px] md:min-h-[100px] text-sm border-0 focus-visible:ring-0 bg-transparent resize-none"
-                      />
-                      <div className="flex items-center justify-end pt-2 border-t border-border/40">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                          disabled={isLoading || !input.trim()}
-                        >
-                          <Paperclip className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          type="submit"
-                          size="icon"
-                          className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                          disabled={isLoading || !input.trim()}
-                        >
-                          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
-                        </Button>
+                      <div className="relative">
+                        <AutoResizingTextarea
+                          value={input}
+                          onChange={handleInputChange}
+                          placeholder="Escribe tu consulta legal aquí..."
+                          onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault()
+                              handleSubmit(e)
+                            }
+                          }}
+                          autoFocus
+                          ref={textareaRef}
+                          className="min-h-[60px] md:min-h-[60px] resize-none pr-20 pl-5 py-4"
+                        />
+                        <div className="absolute right-2 bottom-2 flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
+                            disabled={isLoading || !input.trim()}
+                          >
+                            <Mic className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="submit"
+                            size="icon"
+                            className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95 bg-primary/90 hover:bg-primary"
+                            disabled={isLoading || !input.trim()}
+                          >
+                            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
+                          </Button>
+                        </div>
                       </div>
                     </form>
                   </div>

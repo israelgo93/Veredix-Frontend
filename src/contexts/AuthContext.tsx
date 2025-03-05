@@ -1,3 +1,4 @@
+// src/contexts/AuthContext.tsx
 "use client"
 
 import React, { createContext, useContext, useState, useEffect } from "react"
@@ -10,6 +11,8 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>
   logout: () => Promise<void>
   loading: boolean
+  resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>
+  updatePassword: (password: string) => Promise<{ success: boolean; error?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -51,12 +54,47 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (error) throw error
   }
 
+  // Nueva función para solicitar restablecimiento de contraseña
+  const resetPassword = async (email: string) => {
+    try {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://veredix.app";
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${siteUrl}/auth/update-password`,
+      });
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error("Error al solicitar restablecimiento de contraseña:", error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Error desconocido" 
+      };
+    }
+  }
+
+  // Nueva función para actualizar la contraseña
+  const updatePassword = async (password: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password })
+      if (error) throw error
+      return { success: true }
+    } catch (error) {
+      console.error("Error al actualizar la contraseña:", error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Error desconocido" 
+      }
+    }
+  }
+
   const value = {
     isAuthenticated,
     user,
     login,
     logout,
     loading,
+    resetPassword,
+    updatePassword,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

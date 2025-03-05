@@ -21,8 +21,8 @@ export function ThemeToggle() {
   const handleLogout = async () => {
     try {
       await logout();
-      // Puedes recargar la página o realizar cualquier otra acción si lo deseas:
-      // window.location.reload();
+      // Recargar la página después de cerrar sesión para limpiar la interfaz
+      window.location.reload();
     } catch (error) {
       console.error("Error al cerrar sesión:", error);
     }
