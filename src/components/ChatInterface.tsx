@@ -81,12 +81,6 @@ const markdownStyles = {
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
-/* Componente para el mensaje de advertencia */
-const WarningMessage = () => (
-  <div className="text-center text-xs text-muted-foreground mt-2">
-    Veredix puede cometer errores. Considera verificar la información importante.
-  </div>
-)
 
 /* Nuevo componente que cicla varias animaciones mientras se procesa la respuesta */
 const multiStages = [

@@ -65,7 +65,7 @@ export function SignUpForm({ className, ...props }: React.HTMLAttributes<HTMLDiv
     setResendSuccess(false)
 
     try {
-      const { success, error } = await resendVerificationEmail(email)
+      const { error } = await resendVerificationEmail(email)
       
       if (error) {
         throw new Error(error)
