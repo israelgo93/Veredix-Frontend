@@ -81,6 +81,13 @@ const markdownStyles = {
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
+/* Componente para el mensaje de advertencia */
+const WarningMessage = () => (
+  <div className="text-center text-xs text-muted-foreground mt-2">
+    Veredix puede cometer errores. Considera verificar la información importante.
+  </div>
+)
+
 /* Nuevo componente que cicla varias animaciones mientras se procesa la respuesta */
 const multiStages = [
   "Pensando",
@@ -818,6 +825,10 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                     </form>
                   </div>
                 </Card>
+                {/* Mensaje de advertencia en el footer del chat activo */}
+                <div className="text-center text-[10px] md:text-[11px] text-muted-foreground mt-1 leading-tight tracking-tight opacity-80">
+                  Veredix puede cometer errores. Considera verificar la información importante.
+                </div>
               </div>
             </div>
           </>

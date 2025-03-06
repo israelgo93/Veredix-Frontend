@@ -13,6 +13,7 @@ interface AuthContextType {
   loading: boolean
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>
   updatePassword: (password: string) => Promise<{ success: boolean; error?: string }>
+  resendVerificationEmail: (email: string) => Promise<{ success: boolean; error?: string }>
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -87,6 +88,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }
 
+  // Nueva función para reenviar el correo de verificación
+  const resendVerificationEmail = async (email: string) => {
+    try {
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://veredix.app";
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          emailRedirectTo: `${siteUrl}/auth/login`,
+        },
+      });
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error) {
+      console.error("Error al reenviar correo de verificación:", error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : "Error desconocido" 
+      };
+    }
+  }
+
   const value = {
     isAuthenticated,
     user,
@@ -95,6 +119,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loading,
     resetPassword,
     updatePassword,
+    resendVerificationEmail,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

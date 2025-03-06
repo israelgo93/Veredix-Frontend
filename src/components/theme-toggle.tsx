@@ -1,7 +1,7 @@
 // chat-legal/src/components/theme-toggle.tsx
 "use client";
 
-import { Moon, Sun, Laptop, Settings, LogOut } from "lucide-react";
+import { Moon, Sun, Laptop, Settings, LogOut, Info } from "lucide-react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "../contexts/AuthContext";
+import Link from "next/link";
 
 export function ThemeToggle() {
   const { setTheme } = useTheme();
@@ -65,6 +66,14 @@ export function ThemeToggle() {
         <DropdownMenuItem onClick={() => setTheme("system")} className="flex items-center gap-2">
           <Laptop className="h-4 w-4" />
           <span>Sistema</span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/about" className="flex items-center gap-2 cursor-pointer">
+            <Info className="h-4 w-4" />
+            <span>Acerca de Veredix</span>
+          </Link>
         </DropdownMenuItem>
 
         {isAuthenticated && (

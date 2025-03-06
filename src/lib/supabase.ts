@@ -31,16 +31,3 @@ supabase.auth.onAuthStateChange((event, session) => {
     }
   }
 })
-
-// Test Supabase connection
-supabase
-  .from("user_sessions")
-  .select("count", { count: "exact" })
-  .then(({ count, error }) => {
-    if (error) {
-      console.error("Error connecting to Supabase:", error)
-    } else {
-      console.log("Successfully connected to Supabase. Number of user sessions:", count)
-    }
-  })
-
