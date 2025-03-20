@@ -27,11 +27,12 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Mic,
+  Activity,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
-import { useChat, type Source } from "../hooks/useChat"
+import { useChat, type Source, type AgentTask, type ProcessingState } from "../hooks/useChat"
 //import { useTheme } from "next-themes"
 import AutoResizingTextarea from "./AutoResizingTextarea"
 import {
@@ -52,6 +53,15 @@ import Link from "next/link"
 import { useAuth } from "../contexts/AuthContext"
 import { ThemeToggle } from "./theme-toggle"
 import Image from "next/image"
+import { 
+  MultiStageIndicator, 
+  TaskGenerationIndicator, 
+  ProcessingIndicator,
+  SmartProcessingIndicator
+} from "./enhanced-indicators"
+// Importamos los nuevos componentes personalizados
+import TaskAccordion from "./TaskAccordion"
+import SourceAccordion from "./SourceAccordion"
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -81,75 +91,6 @@ const markdownStyles = {
   pre: "mb-3 mt-3 overflow-x-auto rounded-lg border bg-muted p-3",
 }
 
-
-/* Nuevo componente que cicla varias animaciones mientras se procesa la respuesta */
-const multiStages = [
-  "Pensando",
-  "Razonando",
-  "Analizando",
-  "Preparando respuesta",
-]
-const MultiStageIndicator = () => {
-  const [stageIndex, setStageIndex] = useState(0)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStageIndex((prev) => (prev + 1) % multiStages.length)
-    }, 2000) // Cambia de etapa cada 2 segundos
-    return () => clearInterval(interval)
-  }, [])
-  return (
-    <div className="inline-flex items-center gap-2 px-3 py-2">
-      <span className="align-middle text-sm font-medium animate-pulse bg-gradient-to-r from-gray-400 to-gray-600 bg-clip-text text-transparent">
-        {multiStages[stageIndex]}
-      </span>
-    </div>
-  )
-}
-
-interface SourceAccordionProps {
-  source: Source
-}
-
-const SourceAccordion = ({ source }: SourceAccordionProps) => {
-  const [expanded, setExpanded] = useState(false)
-  const summary =
-    source.content.length > 100
-      ? source.content.slice(0, 100).trim() + "..."
-      : source.content
-
-  return (
-    <div className="border-b border-border pb-2 mb-2">
-      <div className="flex items-center justify-between">
-        <div>
-          <span className="font-semibold text-xs md:text-sm">
-            {source.name}
-          </span>
-          <span className="ml-2 text-xs text-muted-foreground">
-            Página {source.meta_data?.page || "N/A"}
-          </span>
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-muted-foreground text-xs transition-transform duration-200 hover:scale-105 active:scale-95"
-          onClick={() => setExpanded((prev) => !prev)}
-        >
-          {expanded ? "Mostrar menos" : "Leer más"}
-        </Button>
-      </div>
-      <div className="mt-1 text-xs text-muted-foreground">
-        {expanded ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-            {source.content}
-          </ReactMarkdown>
-        ) : (
-          <p>{summary}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
 const SourcesList = ({ sources }: { sources: Source[] }) => (
   <div className="space-y-2">
     {sources.map((source, index) => (
@@ -158,12 +99,22 @@ const SourcesList = ({ sources }: { sources: Source[] }) => (
   </div>
 )
 
+const TasksList = ({ tasks }: { tasks: AgentTask[] }) => (
+  <div className="space-y-2">
+    {tasks.map((task) => (
+      <TaskAccordion key={task.id} task={task} />
+    ))}
+  </div>
+)
+
 interface MessageActionsProps {
-  content: string
+  content: string | object | any[]
   copyToClipboard: (text: string) => void
   onRegenerate: () => void
   hasSources?: boolean
   toggleSources?: () => void
+  hasTasks?: boolean
+  toggleTasks?: () => void
 }
 
 const MessageActions = ({
@@ -172,18 +123,30 @@ const MessageActions = ({
   onRegenerate,
   hasSources = false,
   toggleSources,
+  hasTasks = false,
+  toggleTasks,
 }: MessageActionsProps) => {
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
-    copyToClipboard(content)
+    // Si el contenido no es un string, convertirlo
+    const textToCopy = typeof content === "string" 
+      ? content
+      : JSON.stringify(content, null, 2);
+    
+    copyToClipboard(textToCopy)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const handleShare = (platform: string) => {
     let url = ""
-    const text = encodeURIComponent(content)
+    // Si el contenido no es un string, convertirlo
+    const textForSharing = typeof content === "string" 
+      ? content
+      : JSON.stringify(content, null, 2);
+    
+    const text = encodeURIComponent(textForSharing)
     switch (platform) {
       case "twitter":
         url = `https://twitter.com/intent/tweet?text=${text}`
@@ -290,6 +253,24 @@ const MessageActions = ({
             </TooltipContent>
           </Tooltip>
         )}
+
+        {hasTasks && toggleTasks && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
+                onClick={toggleTasks}
+              >
+                <Activity className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Tareas de agentes</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </TooltipProvider>
   )
@@ -347,10 +328,193 @@ const SourcesDrawer = ({ sources, onClose }: SourcesDrawerProps) => {
   )
 }
 
+interface TasksDrawerProps {
+  tasks: AgentTask[]
+  onClose: () => void
+}
+
+const TasksDrawer = ({ tasks, onClose }: TasksDrawerProps) => {
+  const drawerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-[999999] overflow-hidden">
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+        <div
+          ref={drawerRef}
+          className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative"
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-2 right-2 z-[10000] rounded-md p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition-transform duration-200 hover:scale-105 active:scale-95"
+            aria-label="Cerrar panel de tareas"
+          >
+            <ChevronsRight className="h-6 w-6" />
+          </button>
+          <div className="flex h-full flex-col overflow-hidden bg-background/50 backdrop-blur-sm rounded-xl shadow-lg">
+            <div className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/70 px-4 py-3">
+              <h2 className="text-lg font-semibold">Tareas de Agentes</h2>
+            </div>
+            <div className="relative flex-1 overflow-y-auto px-4 py-6">
+              <div className="space-y-6">
+                <TasksList tasks={tasks} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 interface ChatInterfaceProps {
   onChatStarted?: () => void
   onNewChat?: () => void
 }
+
+// Función auxiliar para renderizar contenido de mensaje que puede ser objeto, array o string
+const renderMessageContent = (content: any) => {
+  // Si es string, usar ReactMarkdown normalmente
+  if (typeof content === "string") {
+    return (
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeRaw]}
+        components={{
+          p: ({ children }) => <p className={markdownStyles.p}>{children}</p>,
+          h1: ({ children }) => <h1 className={markdownStyles.h1}>{children}</h1>,
+          h2: ({ children }) => <h2 className={markdownStyles.h2}>{children}</h2>,
+          h3: ({ children }) => <h3 className={markdownStyles.h3}>{children}</h3>,
+          h4: ({ children }) => <h4 className={markdownStyles.h4}>{children}</h4>,
+          ul: ({ children }) => (
+            <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
+          ),
+          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+          a: ({ href, children }) => (
+            <a href={href} className={markdownStyles.a}>
+              {children}
+            </a>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
+          ),
+          code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
+            inline ? (
+              <code className={markdownStyles.code}>{children}</code>
+            ) : (
+              <pre className={markdownStyles.pre}>
+                <code>{children}</code>
+              </pre>
+            ),                                      
+          table: ({ children }) => (
+            <div className="overflow-x-auto" style={{ width: "100%" }}>
+              <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
+                {children}
+              </table>
+            </div>
+          ),
+          th: ({ children }) => (
+            <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-border px-3 py-2 whitespace-normal">
+              {children}
+            </td>
+          ),
+          hr: () => <hr className="my-6 border-border" />,
+          img: (props) => {
+            const { src, alt, width, height, ...rest } = props
+            if (!src) return null
+            return (
+              <Image
+                src={src!}
+                alt={alt || ""}
+                width={width ? parseInt(width.toString(), 10) : 600}
+                height={height ? parseInt(height.toString(), 10) : 400}
+                {...rest}
+                className="rounded-lg border border-border max-w-full h-auto"
+                unoptimized
+              />
+            )
+          },
+          strong: ({ children }) => (
+            <strong className="font-semibold">{children}</strong>
+          ),
+          em: ({ children }) => <em className="italic">{children}</em>,
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    );
+  }
+  
+  // Si es un array (caso Claude con tools)
+  if (Array.isArray(content)) {
+    return (
+      <div className="space-y-4">
+        {content.map((item, idx) => (
+          <div key={idx} className="border-l-2 border-primary/30 pl-3 py-1 mb-3">
+            <div className="flex items-center mb-1 gap-1">
+              <span className="font-semibold text-xs">
+                {item.type === "tool_result" ? "Resultado de herramienta" : item.type}
+              </span>
+              {item.tool_use_id && (
+                <span className="text-xs text-muted-foreground">ID: {item.tool_use_id.substring(0, 10)}...</span>
+              )}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              {typeof item.content === "string" ? (
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeRaw]}
+                  className="text-xs overflow-x-auto"
+                >
+                  {item.content.length > 300 
+                    ? `${item.content.substring(0, 300)}...` 
+                    : item.content}
+                </ReactMarkdown>
+              ) : (
+                <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">
+                  {JSON.stringify(item.content, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  
+  // Si es un objeto y no es un array
+  if (typeof content === "object" && content !== null) {
+    return (
+      <pre className="text-xs overflow-x-auto bg-muted p-2 rounded whitespace-pre-wrap">
+        {JSON.stringify(content, null, 2)}
+      </pre>
+    );
+  }
+  
+  // Fallback
+  return <p>{String(content)}</p>;
+};
 
 export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfaceProps) {
   const {
@@ -359,17 +523,24 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     sendMessage,
     isLoading,
     sources,
+    agentTasks,
+    isGeneratingTask,
+    processingState, // Estado de procesamiento
+    currentModel,    // Modelo actual (claude o openai)
     userSessions,
     currentChatId,
     loadSession,
     createNewChat,
     deleteSession,
     renameSession,
+    cancelRequest,
+    canStopResponse,
   } = useChat()
   const { isAuthenticated, user, logout } = useAuth()
   const [isInitialView, setIsInitialView] = useState(true)
   const [input, setInput] = useState("")
   const [showSources, setShowSources] = useState(false)
+  const [showTasks, setShowTasks] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
@@ -501,7 +672,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     }
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")
     if (lastUserMessage) {
-      await sendMessage(lastUserMessage.content, true)
+      await sendMessage(lastUserMessage.content as string, true)
     }
   }
 
@@ -517,6 +688,22 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   }
 
   const showMobileHeader = isMobile && (isAuthenticated || !isInitialView)
+
+  // Función para determinar qué indicador mostrar basado en el estado
+  const getThinkingIndicator = (messageIndex: number) => {
+    if (regeneratingIndex === messageIndex) {
+      // Si estamos regenerando este mensaje específico
+      return <ProcessingIndicator state={processingState} model={currentModel} />
+    } else if (messageIndex === messages.length - 1 && isLoading) {
+      // Si es el último mensaje y está cargando
+      return <SmartProcessingIndicator 
+                state={processingState} 
+                isGeneratingTask={isGeneratingTask}
+                model={currentModel} 
+             />
+    }
+    return null;
+  }
 
   return (
     <div
@@ -628,7 +815,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                 {messages.map((message, index) => {
                   const showThinking =
                     message.role === "assistant" &&
-                    (regeneratingIndex === index || (isLoading && message.content.trim() === ""))
+                    (regeneratingIndex === index || (isLoading && index === messages.length - 1 && !message.content))
                   return (
                     <div key={index} className="group flex justify-center">
                       <div className="w-full max-w-full sm:max-w-3xl">
@@ -667,82 +854,10 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                               }`}
                             >
                               {message.role === "assistant" && showThinking ? (
-                                <MultiStageIndicator />
+                                getThinkingIndicator(index)
                               ) : (
                                 <div className="prose prose-neutral dark:prose-invert max-w-full overflow-x-hidden text-xs sm:text-sm md:text-base">
-                                  <ReactMarkdown
-                                    remarkPlugins={[remarkGfm]}
-                                    rehypePlugins={[rehypeRaw]}
-                                    components={{
-                                      p: ({ children }) => <p className={markdownStyles.p}>{children}</p>,
-                                      h1: ({ children }) => <h1 className={markdownStyles.h1}>{children}</h1>,
-                                      h2: ({ children }) => <h2 className={markdownStyles.h2}>{children}</h2>,
-                                      h3: ({ children }) => <h3 className={markdownStyles.h3}>{children}</h3>,
-                                      h4: ({ children }) => <h4 className={markdownStyles.h4}>{children}</h4>,
-                                      ul: ({ children }) => (
-                                        <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
-                                      ),
-                                      ol: ({ children }) => (
-                                        <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
-                                      ),
-                                      li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-                                      a: ({ href, children }) => (
-                                        <a href={href} className={markdownStyles.a}>
-                                          {children}
-                                        </a>
-                                      ),
-                                      blockquote: ({ children }) => (
-                                        <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
-                                      ),
-                                      code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
-                                        inline ? (
-                                          <code className={markdownStyles.code}>{children}</code>
-                                        ) : (
-                                          <pre className={markdownStyles.pre}>
-                                            <code>{children}</code>
-                                          </pre>
-                                        ),                                      
-                                      table: ({ children }) => (
-                                        <div className="overflow-x-auto" style={{ width: "100%" }}>
-                                          <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
-                                            {children}
-                                          </table>
-                                        </div>
-                                      ),
-                                      th: ({ children }) => (
-                                        <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
-                                          {children}
-                                        </th>
-                                      ),
-                                      td: ({ children }) => (
-                                        <td className="border border-border px-3 py-2 whitespace-normal">
-                                          {children}
-                                        </td>
-                                      ),
-                                      hr: () => <hr className="my-6 border-border" />,
-                                      img: (props) => {
-                                        const { src, alt, width, height, ...rest } = props
-                                        if (!src) return null
-                                        return (
-                                          <Image
-                                            src={src!}
-                                            alt={alt || ""}
-                                            width={width ? parseInt(width.toString(), 10) : 600}
-                                            height={height ? parseInt(height.toString(), 10) : 400}
-                                            {...rest}
-                                            className="rounded-lg border border-border max-w-full h-auto"
-                                            unoptimized
-                                          />
-                                        )
-                                      },
-                                      strong: ({ children }) => (
-                                        <strong className="font-semibold">{children}</strong>
-                                      ),
-                                      em: ({ children }) => <em className="italic">{children}</em>,
-                                    }}
-                                  >
-                                    {message.content}
-                                  </ReactMarkdown>
+                                  {renderMessageContent(message.content)}
                                 </div>
                               )}
                             </div>
@@ -753,6 +868,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                 onRegenerate={handleRegenerate}
                                 hasSources={sources.length > 0}
                                 toggleSources={() => setShowSources((prev) => !prev)}
+                                hasTasks={agentTasks.length > 0}
+                                toggleTasks={() => setShowTasks((prev) => !prev)}
                               />
                             )}
                           </div>
@@ -780,6 +897,14 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                         </button>
                       </div>
                     )}
+                    
+                    {/* Indicador de actividad sobre el textarea */}
+                    {isLoading && processingState !== "idle" && processingState !== "streaming" && (
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-background/80 backdrop-blur-sm py-1 px-3 rounded-full shadow-md border border-border/30 z-20">
+                        <ProcessingIndicator state={processingState} model={currentModel} />
+                      </div>
+                    )}
+                    
                     <form onSubmit={handleSubmit} className="relative flex flex-col gap-2">
                       <div className="relative">
                         <AutoResizingTextarea
@@ -832,6 +957,11 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
       {/* Panel de Fuentes */}
       {showSources && sources.length > 0 && (
         <SourcesDrawer sources={sources} onClose={() => setShowSources(false)} />
+      )}
+      
+      {/* Panel de Tareas de Agentes */}
+      {showTasks && agentTasks.length > 0 && (
+        <TasksDrawer tasks={agentTasks} onClose={() => setShowTasks(false)} />
       )}
 
       {/* Renderizado del Sidebar:

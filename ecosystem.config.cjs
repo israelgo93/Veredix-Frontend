@@ -4,6 +4,7 @@ module.exports = {
       name: "veredix",
       script: "npm",
       args: "run start",
+      autorestart: true,
       env: {
         NODE_ENV: "production"
       },
