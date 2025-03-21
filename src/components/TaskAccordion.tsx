@@ -59,7 +59,9 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     // Verifica si la tarea es una búsqueda de conocimiento y tiene un resultado que parece ser JSON
     if (task.agent.includes("search_knowledge") || 
         task.agent.includes("agente_buscador") || 
+        task.agent.includes("busqueda_profunda") || 
         task.task.includes("search_knowledge") || 
+        task.task.includes("busqueda_profunda") ||
         task.task.includes("buscar")) {
       
       const parsedResult = tryParseJSON(task.result)
@@ -89,7 +91,9 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     // Si es una tarea de búsqueda de conocimiento, muestra un resumen personalizado
     if (task.agent.includes("search_knowledge") || 
         task.agent.includes("agente_buscador") || 
+        task.agent.includes("busqueda_profunda") || 
         task.task.includes("search_knowledge") || 
+        task.task.includes("busqueda_profunda") ||
         task.task.includes("buscar")) {
       
       const parsedResult = tryParseJSON(task.result)
@@ -106,11 +110,19 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
 
   // Obtiene un título representativo para la tarea basado en el agente y contenido
   const getTaskTitle = () => {
-    if (task.agent.includes("search_knowledge") || task.agent.includes("agente_buscador")) {
+    if (task.agent.includes("search_knowledge")) {
       return "Búsqueda en base de conocimiento";
     }
+
+    if (task.agent.includes("agente_buscador") || task.agent.includes("buscador")) {
+      return "Búsqueda en la Web";
+    }
+
+    if (task.agent.includes("busqueda_profunda") || task.agent.includes("profunda")) {
+      return "Búsqueda Profunda en la Web";
+    }
     
-    if (task.agent.includes("legal")) {
+    if (task.agent.includes("agente_legal") || task.agent.includes("legal")) {
       return "Consulta legal";
     }
     
