@@ -34,7 +34,7 @@ export const MultiStageIndicator = () => {
       clearInterval(stageInterval)
       clearInterval(dotsInterval)
     }
-  }, [])
+  }, [multiStages.length])
   
   return (
     <div className="flex items-center space-x-2 px-2 py-1 text-sm text-zinc-500 dark:text-zinc-400">

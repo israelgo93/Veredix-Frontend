@@ -32,7 +32,7 @@ import {
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
-import { useChat, type Source, type AgentTask, type ProcessingState } from "../hooks/useChat"
+import { useChat, type Source, type AgentTask } from "../hooks/useChat"
 //import { useTheme } from "next-themes"
 import AutoResizingTextarea from "./AutoResizingTextarea"
 import {
@@ -54,10 +54,8 @@ import { useAuth } from "../contexts/AuthContext"
 import { ThemeToggle } from "./theme-toggle"
 import Image from "next/image"
 import { 
-  MultiStageIndicator, 
-  TaskGenerationIndicator, 
-  ProcessingIndicator,
-  SmartProcessingIndicator
+  SmartProcessingIndicator,
+  ProcessingIndicator 
 } from "./enhanced-indicators"
 // Importamos los nuevos componentes personalizados
 import TaskAccordion from "./TaskAccordion"
@@ -108,13 +106,21 @@ const TasksList = ({ tasks }: { tasks: AgentTask[] }) => (
 )
 
 interface MessageActionsProps {
-  content: string | object | any[]
+  content: string | Record<string, unknown> | Array<Record<string, unknown>>
   copyToClipboard: (text: string) => void
   onRegenerate: () => void
   hasSources?: boolean
   toggleSources?: () => void
   hasTasks?: boolean
   toggleTasks?: () => void
+}
+
+// Definir un tipo para los elementos dentro de los arrays de contenido
+interface ContentItem {
+  type: string;
+  content: string | Record<string, unknown>;
+  tool_use_id?: string;
+  [key: string]: unknown;
 }
 
 const MessageActions = ({
@@ -386,7 +392,7 @@ interface ChatInterfaceProps {
 }
 
 // Función auxiliar para renderizar contenido de mensaje que puede ser objeto, array o string
-const renderMessageContent = (content: any) => {
+const renderMessageContent = (content: string | Record<string, unknown> | Array<Record<string, unknown>>) => {
   // Si es string, usar ReactMarkdown normalmente
   if (typeof content === "string") {
     return (
@@ -470,7 +476,7 @@ const renderMessageContent = (content: any) => {
   if (Array.isArray(content)) {
     return (
       <div className="space-y-4">
-        {content.map((item, idx) => (
+        {(content as Array<ContentItem>).map((item, idx) => (
           <div key={idx} className="border-l-2 border-primary/30 pl-3 py-1 mb-3">
             <div className="flex items-center mb-1 gap-1">
               <span className="font-semibold text-xs">
@@ -525,16 +531,14 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     sources,
     agentTasks,
     isGeneratingTask,
-    processingState, // Estado de procesamiento
-    currentModel,    // Modelo actual (claude o openai)
+    processingState,
+    currentModel,
     userSessions,
     currentChatId,
     loadSession,
     createNewChat,
     deleteSession,
     renameSession,
-    cancelRequest,
-    canStopResponse,
   } = useChat()
   const { isAuthenticated, user, logout } = useAuth()
   const [isInitialView, setIsInitialView] = useState(true)

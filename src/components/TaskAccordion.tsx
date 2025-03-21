@@ -25,10 +25,10 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   const [expanded, setExpanded] = useState(false)
   
   // Intenta detectar si el resultado es JSON, y si es así, lo parsea
-  const tryParseJSON = (jsonString: string): any => {
+  const tryParseJSON = (jsonString: string): Record<string, unknown> | null => {
     try {
       return JSON.parse(jsonString)
-    } catch (e) {
+    } catch {
       return null
     }
   }
@@ -36,7 +36,7 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   // Función para renderizar una fuente de conocimiento
   const renderKnowledgeSource = (source: ParsedSource) => {
     return (
-      <Card key={source.name + source.meta_data?.page} className="p-3 mb-2 text-xs">
+      <Card key={source.name + (source.meta_data?.page ?? '')} className="p-3 mb-2 text-xs">
         <div className="flex items-center justify-between mb-2">
           <div>
             <span className="font-bold">{source.name}</span>
@@ -68,7 +68,7 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
         return (
           <div className="space-y-3">
             <p className="font-medium text-xs">Se encontraron {parsedResult.length} fuentes relevantes:</p>
-            {parsedResult.map((source, index) => renderKnowledgeSource(source))}
+            {parsedResult.map((source) => renderKnowledgeSource(source as ParsedSource))}
           </div>
         )
       }
@@ -128,7 +128,7 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     // Si la tarea incluye parámetros en formato JSON, intenta extraer la consulta
     if (task.task.includes("{\"query\":")) {
       const parsed = tryParseJSON(task.task);
-      if (parsed && parsed.query) {
+      if (parsed && typeof parsed.query === 'string') {
         return parsed.query;
       }
     }
@@ -136,7 +136,7 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     // Para OpenAI, la consulta puede estar en task_description
     if (task.task.includes("task_description")) {
       const parsed = tryParseJSON(task.task);
-      if (parsed && parsed.task_description) {
+      if (parsed && typeof parsed.task_description === 'string') {
         return parsed.task_description;
       }
     }

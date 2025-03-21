@@ -8,7 +8,7 @@ import type { Session } from "@supabase/supabase-js"
 
 export interface Message {
   role: "user" | "assistant"
-  content: string | object | any[] // Actualizado para permitir diferentes tipos de contenido
+  content: string | Record<string, unknown> | Array<Record<string, unknown>> // Tipo más específico en lugar de any
   status?: "thinking" | "responding" | "complete"
   tool_call_id?: string
 }
@@ -31,6 +31,14 @@ export interface Source {
   content: string
 }
 
+// Nueva interfaz para los elementos dentro de los arrays de contenido
+interface ToolResultItem {
+  type: string;
+  content: string | Record<string, unknown>;
+  tool_use_id?: string;
+  [key: string]: unknown;
+}
+
 // Nueva interfaz para las tareas de agentes
 export interface AgentTask {
   id: string
@@ -46,7 +54,7 @@ export interface ExtraData {
 }
 
 export interface ApiResponse {
-  content: string | object | any[]
+  content: string | Record<string, unknown> | Array<Record<string, unknown>>
   content_type: string
   event: string
   model?: string
@@ -72,7 +80,7 @@ export interface ApiResponse {
     tool_name?: string
     tool_args?: Record<string, string>
     tool_call_error?: boolean
-    metrics?: Record<string, any>
+    metrics?: Record<string, unknown>
     created_at?: number
   }>
 }
@@ -97,6 +105,20 @@ export type ProcessingState =
   | "analyzing"          // Analizando resultados antes de continuar
   | "resuming"           // Reanudando generación de respuesta
   | "completing";        // Completando la respuesta
+
+// Interfaz para las herramientas
+interface ToolCall {
+  id?: string
+  tool_call_id?: string
+  function?: {
+    name: string
+    arguments: string | Record<string, unknown>
+  }
+  tool_name?: string
+  tool_args?: Record<string, unknown>
+  content?: string
+  tool_call_error?: boolean
+}
 
 const fetchUserSessions = async (userId: string): Promise<UserSession[]> => {
   if (!userId) return []
@@ -346,7 +368,7 @@ export function useChat() {
    * que se completarán cuando llegue su resultado correspondiente.
    * Compatible con ambos modelos (Claude y OpenAI)
    */
-  const processToolCalls = useCallback((toolCalls: ApiResponse["tool_calls"] | any[]) => {
+  const processToolCalls = useCallback((toolCalls: Array<ToolCall> | undefined) => {
     if (!toolCalls || !Array.isArray(toolCalls)) return;
     
     // Si hay tool_calls válidos, marcar que estamos generando tareas
@@ -385,17 +407,24 @@ export function useChat() {
           try {
             // Para Claude
             if (call.function && call.function.arguments) {
-              const args = JSON.parse(typeof call.function.arguments === 'string' 
-                ? call.function.arguments 
-                : JSON.stringify(call.function.arguments));
-              taskDescription = args.task_description || JSON.stringify(args);
+              const args = typeof call.function.arguments === 'string'
+                ? JSON.parse(call.function.arguments)
+                : call.function.arguments;
+              
+              taskDescription = typeof args.task_description === 'string' 
+                ? args.task_description 
+                : JSON.stringify(args);
             } 
             // Para OpenAI
             else if (call.tool_args) {
-              taskDescription = call.tool_args.task_description || JSON.stringify(call.tool_args);
+              taskDescription = typeof call.tool_args.task_description === 'string'
+                ? call.tool_args.task_description 
+                : JSON.stringify(call.tool_args);
             }
           } catch {
-            taskDescription = (call.function?.arguments || JSON.stringify(call.tool_args) || "Tarea sin descripción");
+            taskDescription = typeof call.function?.arguments === 'string'
+              ? call.function.arguments
+              : JSON.stringify(call.tool_args) || "Tarea sin descripción";
           }
           
           // Guardar en pendingToolCalls para completar cuando llegue el resultado
@@ -419,26 +448,13 @@ export function useChat() {
    * llamadas de herramientas correspondientes (tool_calls) para crear tareas completas.
    * Compatible con ambos modelos (Claude y OpenAI)
    */
-  const processToolResults = useCallback((toolResults: any[] | undefined) => {
+  const processToolResults = useCallback((toolResults: Array<Record<string, unknown>> | undefined) => {
     if (!toolResults || !Array.isArray(toolResults)) return;
     
     let resultsProcessed = false;
     
-    toolResults.forEach(result => {
-      // Estructura de Claude - resultados como parte del content en mensajes
-      if (result.type === "tool_result" && result.tool_use_id && result.content) {
-        handleToolResult(result.tool_use_id, result.content);
-        resultsProcessed = true;
-      } 
-      // Estructura de OpenAI - resultados directos en la herramienta
-      else if (result.tool_call_id && result.content && !result.tool_call_error) {
-        handleToolResult(result.tool_call_id, result.content);
-        resultsProcessed = true;
-      }
-    });
-    
-    // Función interna para manejar los resultados de herramientas
-    function handleToolResult(toolId: string, content: string) {
+    // Función interna para manejar los resultados de herramientas (convertida a expresión de función)
+    const handleToolResult = (toolId: string, content: string) => {
       const pendingCall = pendingToolCalls.current.get(toolId);
       
       if (pendingCall) {
@@ -476,7 +492,20 @@ export function useChat() {
           updateActivity();
         }
       }
-    }
+    };
+    
+    toolResults.forEach(result => {
+      // Estructura de Claude - resultados como parte del content en mensajes
+      if (result.type === "tool_result" && result.tool_use_id && typeof result.content === 'string') {
+        handleToolResult(result.tool_use_id as string, result.content);
+        resultsProcessed = true;
+      } 
+      // Estructura de OpenAI - resultados directos en la herramienta
+      else if (result.tool_call_id && result.content && !result.tool_call_error) {
+        handleToolResult(result.tool_call_id as string, result.content as string);
+        resultsProcessed = true;
+      }
+    });
     
     // Si procesamos al menos un resultado y todavía hay pendientes, actualizamos el estado
     if (resultsProcessed && pendingToolCalls.current.size > 0) {
@@ -551,8 +580,78 @@ export function useChat() {
       processedToolIds.current.clear()
       pendingToolCalls.current.clear()
 
+      // Función interna para manejar los resultados de herramientas (convertida a expresión de función)
+      const handleToolResult = (toolId: string, content: string) => {
+        // Extraer información de la herramienta del historial
+        const toolCallMessage = rawMessages.find(msg => {
+          // Primero convertimos a unknown y luego a Record para evitar el error de TypeScript
+          const msgAsRecord = msg as unknown as Record<string, unknown>;
+          return msg.role === "assistant" && 
+                 msgAsRecord.tool_calls && 
+                 Array.isArray(msgAsRecord.tool_calls) &&
+                 msgAsRecord.tool_calls.some((call: Record<string, unknown>) => call.id === toolId);
+        });
+        
+        let agentName = "desconocido";
+        let taskDescription = "Tarea sin descripción";
+        
+        if (toolCallMessage) {
+          // Usamos la misma técnica de conversión segura
+          const msgAsRecord = toolCallMessage as unknown as Record<string, unknown>;
+          
+          if (msgAsRecord.tool_calls && Array.isArray(msgAsRecord.tool_calls)) {
+            const toolCall = msgAsRecord.tool_calls.find((call: Record<string, unknown>) => call.id === toolId);
+            
+            const toolFunction = toolCall?.function as Record<string, unknown> | undefined;
+            
+            if (toolFunction?.name) {
+              // Extraer nombre del agente
+              agentName = toolFunction.name as string;
+              if (agentName.startsWith("transfer_task_to_")) {
+                agentName = agentName.replace("transfer_task_to_", "");
+              }
+              
+              // Extraer descripción de tarea
+              try {
+                if (toolFunction?.arguments) {
+                  const args = typeof toolFunction.arguments === 'string'
+                    ? JSON.parse(toolFunction.arguments)
+                    : toolFunction.arguments;
+                    
+                  taskDescription = typeof args.task_description === 'string'
+                    ? args.task_description
+                    : JSON.stringify(args);
+                }
+              } catch {
+                taskDescription = typeof toolFunction?.arguments === 'string'
+                  ? toolFunction.arguments
+                  : "Tarea sin descripción";
+              }
+            }
+          }
+        }
+        
+        // Crear tarea
+        const newTask: AgentTask = {
+          id: toolId,
+          agent: agentName,
+          task: taskDescription,
+          result: content,
+          timestamp: new Date().toISOString()
+        };
+        
+        // Añadir la tarea solo si no existe ya
+        setAgentTasks(prev => {
+          const exists = prev.some(task => task.id === newTask.id);
+          if (!exists) {
+            return [...prev, newTask];
+          }
+          return prev;
+        });
+      };
+
       // 1. Filtrar y procesar mensajes de la conversación (user / assistant)
-      let filteredMessages = rawMessages
+      const filteredMessages = rawMessages
         .filter(
           (msg) => {
             // Filtrar mensajes nulos
@@ -571,7 +670,7 @@ export function useChat() {
                 // Procesar resultados para actualizar el estado de tareas
                 msg.content.forEach(item => {
                   if (item.type === "tool_result" && item.tool_use_id && item.content) {
-                    handleToolResult(item.tool_use_id, item.content);
+                    handleToolResult(item.tool_use_id as string, item.content as string);
                   }
                 });
                 // Excluir este mensaje de la conversación visible
@@ -585,13 +684,11 @@ export function useChat() {
         );
 
       // 2. Identificar y combinar respuestas fragmentadas del asistente
-      const consolidatedMessages: any[] = [];
-      let lastUserIndex = -1;
+      const consolidatedMessages: Array<Message | ToolMessage> = [];
       
       filteredMessages.forEach((msg, index) => {
         // Registrar último mensaje del usuario
         if (msg.role === "user") {
-          lastUserIndex = consolidatedMessages.length;
           consolidatedMessages.push(msg);
         } 
         // Procesar mensajes del asistente
@@ -631,7 +728,7 @@ export function useChat() {
         // Si content es un array (formato de Claude para tools)
         if (Array.isArray(msg.content)) {
           // Extraer el contenido relevante de cada elemento del array
-          processedContent = msg.content.map(item => {
+          processedContent = (msg.content as Array<ToolResultItem>).map((item) => {
             if (item.type === "tool_result" && typeof item.content === "string") {
               const shortContent = item.content.length > 100 
                 ? `${item.content.substring(0, 100)}...` 
@@ -654,86 +751,34 @@ export function useChat() {
         };
       });
 
-      // Función interna para manejar los resultados de herramientas
-      function handleToolResult(toolId: string, content: string) {
-        // Extraer información de la herramienta del historial
-        const toolCallMessage = rawMessages.find(msg => 
-          msg.role === "assistant" && 
-          (msg as any).tool_calls?.some((call: any) => call.id === toolId)
-        ) as any;
-        
-        let agentName = "desconocido";
-        let taskDescription = "Tarea sin descripción";
-        
-        if (toolCallMessage?.tool_calls) {
-          const toolCall = toolCallMessage.tool_calls.find((call: any) => call.id === toolId);
-          if (toolCall?.function?.name) {
-            // Extraer nombre del agente
-            agentName = toolCall.function.name;
-            if (agentName.startsWith("transfer_task_to_")) {
-              agentName = agentName.replace("transfer_task_to_", "");
-            }
-            
-            // Extraer descripción de tarea
-            try {
-              if (toolCall.function?.arguments) {
-                const args = JSON.parse(typeof toolCall.function.arguments === 'string'
-                  ? toolCall.function.arguments
-                  : JSON.stringify(toolCall.function.arguments));
-                taskDescription = args.task_description || JSON.stringify(args);
-              }
-            } catch {
-              taskDescription = toolCall.function?.arguments || "Tarea sin descripción";
-            }
-          }
-        }
-        
-        // Crear tarea
-        const newTask: AgentTask = {
-          id: toolId,
-          agent: agentName,
-          task: taskDescription,
-          result: content,
-          timestamp: new Date().toISOString()
-        };
-        
-        // Añadir la tarea solo si no existe ya
-        setAgentTasks(prev => {
-          const exists = prev.some(task => task.id === newTask.id);
-          if (!exists) {
-            return [...prev, newTask];
-          }
-          return prev;
-        });
-      }
-
       // Almacenar tool_calls para procesarlos posteriormente
-      const toolCalls: any[] = [];
-      const toolResults: any[] = [];
+      const toolCalls: Array<ToolCall> = [];
+      const toolResults: Array<Record<string, unknown>> = [];
 
       // Procesar mensajes para extraer tool_calls, tool_results y fuentes
       rawMessages.forEach(msg => {
         // Extraer tool_calls de mensajes del asistente
         if (msg.role === "assistant") {
-          const assistantMsg = msg as any;
+          // Convertir de manera segura a un Record para acceder a propiedades dinámicas
+          const assistantMsg = msg as unknown as Record<string, unknown>;
           
           // Modelo Claude
           if (assistantMsg.tool_calls && Array.isArray(assistantMsg.tool_calls)) {
-            toolCalls.push(...assistantMsg.tool_calls);
+            toolCalls.push(...assistantMsg.tool_calls as Array<ToolCall>);
           }
           
           // Modelo OpenAI - buscar en otras propiedades potenciales
           if (assistantMsg.tools && Array.isArray(assistantMsg.tools)) {
             // Filtrar solo las herramientas que son llamadas (no resultados)
-            const callTools = assistantMsg.tools.filter((t: any) => 
+            const callTools = (assistantMsg.tools as Array<Record<string, unknown>>).filter((t) => 
               t.tool_name && t.tool_args && !t.content);
             
             if (callTools.length > 0) {
-              toolCalls.push(...callTools);
+              toolCalls.push(...callTools as Array<ToolCall>);
             }
             
             // También buscar los resultados
-            const resultTools = assistantMsg.tools.filter((t: any) => 
+            const resultTools = (assistantMsg.tools as Array<Record<string, unknown>>).filter((t) => 
               t.tool_call_id && t.content);
             
             if (resultTools.length > 0) {
@@ -743,9 +788,10 @@ export function useChat() {
         }
         
         // Extraer tool_results
-        if (msg.role === "user" && Array.isArray((msg as any).content)) {
-          const contents = (msg as any).content;
-          contents.forEach((content: any) => {
+        if (msg.role === "user" && Array.isArray(msg.content)) {
+          // Usar conversión segura para evitar errores de tipado
+          const contents = msg.content as Array<Record<string, unknown>>;
+          contents.forEach((content) => {
             if (content.type === "tool_result" && content.tool_use_id && content.content) {
               toolResults.push(content);
             }
@@ -951,7 +997,7 @@ export function useChat() {
               if (parsedData.tools && Array.isArray(parsedData.tools)) {
                 const toolObj = parsedData.tools[0]; // Normalmente hay uno a la vez
                 if (toolObj) {
-                  processToolCalls([toolObj]);
+                  processToolCalls([toolObj as ToolCall]);
                 }
               }
             }
@@ -963,7 +1009,7 @@ export function useChat() {
               
               // Procesar resultados de herramientas (OpenAI style)
               if (parsedData.tools && Array.isArray(parsedData.tools)) {
-                processToolResults(parsedData.tools);
+                processToolResults(parsedData.tools as Array<Record<string, unknown>>);
               }
             }
             
@@ -971,19 +1017,20 @@ export function useChat() {
             if (parsedData.messages && Array.isArray(parsedData.messages)) {
               parsedData.messages.forEach(msg => {
                 if (msg.role === "assistant") {
-                  const assistantMsg = msg as any;
+                  // Convertir de manera segura
+                  const assistantMsg = msg as unknown as Record<string, unknown>;
                   
                   if (assistantMsg.tool_calls) {
-                    processToolCalls(assistantMsg.tool_calls);
+                    processToolCalls(assistantMsg.tool_calls as Array<ToolCall>);
                   }
                 }
                 
                 // Procesar tool_results en mensajes de usuario (formato especial)
-                if (msg.role === "user" && Array.isArray((msg as any).content)) {
-                  const userContent = (msg as any).content;
+                if (msg.role === "user" && Array.isArray((msg as unknown as Record<string, unknown>).content)) {
+                  const userContent = (msg as unknown as Record<string, unknown>).content as Array<Record<string, unknown>>;
                   
                   // Verificar si todos los elementos son tool_result
-                  const isToolResultsOnly = userContent.every((item: any) => 
+                  const isToolResultsOnly = userContent.every((item) => 
                     item.type === "tool_result" && item.tool_use_id
                   );
                   
@@ -1012,14 +1059,14 @@ export function useChat() {
             
             // 5. Procesar herramientas del formato OpenAI
             if (parsedData.tools && Array.isArray(parsedData.tools)) {
-              const toolCalls = parsedData.tools.filter(tool => 
+              const toolCalls = (parsedData.tools as Array<Record<string, unknown>>).filter((tool) => 
                 tool.tool_name && tool.tool_args && !tool.content);
               
               if (toolCalls.length > 0) {
-                processToolCalls(toolCalls);
+                processToolCalls(toolCalls as Array<ToolCall>);
               }
               
-              const toolResults = parsedData.tools.filter(tool => 
+              const toolResults = (parsedData.tools as Array<Record<string, unknown>>).filter((tool) => 
                 tool.tool_call_id && tool.content);
               
               if (toolResults.length > 0) {
@@ -1058,6 +1105,7 @@ export function useChat() {
       processToolCalls, 
       processToolResults, 
       updateActivity,
+      processingState,
       processSourcesFromToolMessage
     ]
   )
@@ -1131,8 +1179,8 @@ export function useChat() {
     sources,
     agentTasks,
     isGeneratingTask,
-    processingState, // Exportamos el nuevo estado de procesamiento
-    currentModel,    // Exportamos el modelo actual
+    processingState,
+    currentModel,
     userSessions,
     deleteSession,
     renameSession,
