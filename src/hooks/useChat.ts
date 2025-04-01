@@ -686,40 +686,48 @@ export function useChat() {
       // 2. Identificar y combinar respuestas fragmentadas del asistente
       const consolidatedMessages: Array<Message | ToolMessage> = [];
       
-      filteredMessages.forEach((msg, index) => {
-        // Registrar último mensaje del usuario
+      // Map para seguir la conversación por pares (usuario-asistente)
+      const conversationPairs: Array<{user: Message | null, assistant: Message | null}> = [];
+      let currentPair: {user: Message | null, assistant: Message | null} = {user: null, assistant: null};
+      
+      // Primero, organizar mensajes en pares de usuario-asistente
+      filteredMessages.forEach((msg) => {
         if (msg.role === "user") {
-          consolidatedMessages.push(msg);
-        } 
-        // Procesar mensajes del asistente
-        else if (msg.role === "assistant") {
-          const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-          
-          // Verificar si este es un mensaje inicial indicando búsqueda
-          const isInitialSearchMessage = typeof content === 'string' && (
-            content.includes("realizaré una búsqueda") || 
-            content.includes("buscaré información") ||
-            (content.length < 200 && (
-              content.includes("buscar") || 
-              content.includes("búsqueda") ||
-              content.includes("obtener información")
-            ))
-          );
-          
-          // Verificar si hay un mensaje siguiente del asistente (potencialmente la respuesta final)
-          const nextMsg = index < filteredMessages.length - 1 ? filteredMessages[index + 1] : null;
-          const hasFollowupAssistantMsg = nextMsg && nextMsg.role === "assistant";
-          
-          // Si es mensaje inicial de búsqueda y hay un mensaje siguiente del asistente, lo saltamos
-          if (isInitialSearchMessage && hasFollowupAssistantMsg) {
-            // No agregamos este mensaje, esperamos al siguiente mensaje del asistente
-            return;
+          // Si hay un par previo incompleto, agregarlo antes de comenzar uno nuevo
+          if (currentPair.user || currentPair.assistant) {
+            conversationPairs.push(currentPair);
           }
-          
-          consolidatedMessages.push(msg);
+          // Comenzar un nuevo par con este mensaje de usuario
+          currentPair = {user: msg as Message, assistant: null};
+        } 
+        else if (msg.role === "assistant") {
+          // Si ya hay un asistente en el par actual, es una respuesta fragmentada
+          if (currentPair.assistant) {
+            // Solo nos quedamos con la respuesta final (la que tiene contenido completo)
+            // Esto resuelve el problema de mostrar mensajes preliminares
+            if (typeof msg.content === 'string' && 
+                typeof currentPair.assistant.content === 'string' && 
+                msg.content.length > currentPair.assistant.content.length) {
+              currentPair.assistant = msg as Message;
+            }
+          } else {
+            // Primera respuesta del asistente para el mensaje actual
+            currentPair.assistant = msg as Message;
+          }
         }
       });
       
+      // Agregar el último par si existe
+      if (currentPair.user || currentPair.assistant) {
+        conversationPairs.push(currentPair);
+      }
+      
+      // Convertir los pares en una secuencia lineal de mensajes
+      conversationPairs.forEach(pair => {
+        if (pair.user) consolidatedMessages.push(pair.user);
+        if (pair.assistant) consolidatedMessages.push(pair.assistant);
+      });
+
       // 3. Procesar contenido de los mensajes consolidados
       const conversationMessages: Message[] = consolidatedMessages.map((msg) => {
         // NUEVA LÓGICA: Procesar contenido que no es string
@@ -920,7 +928,9 @@ export function useChat() {
               // No lo agregamos, ya que probablemente es parte de una respuesta fragmentada
               if (currentContentRef.current && isInitialSearchMessage) {
                 console.log("Skipping initial search message as we already have content");
-                return;
+                // SOLUCIÓN: Eliminar el return y solo omitir este contenido específico
+                // antes retornaba prematuramente de la función completa
+                continue; // Usamos continue para saltar solo esta iteración, no toda la función
               }
               
               // Si este es el primer contenido y es mensaje de búsqueda, lo guardamos como temporal
