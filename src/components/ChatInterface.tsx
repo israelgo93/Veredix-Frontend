@@ -29,6 +29,8 @@ import {
   Mic,
   Activity,
   Brain,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -72,6 +74,34 @@ function useIsMobile() {
   }, [])
   return isMobile
 }
+
+// Componente para mostrar un mensaje de error con opción de reintentar
+interface ErrorMessageProps {
+  message: string;
+  onRetry?: () => void;
+  isRetryable?: boolean;
+}
+
+const ErrorMessage = ({ message, onRetry, isRetryable = true }: ErrorMessageProps) => (
+  <div className="max-w-3xl mx-auto px-4 py-2">
+    <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg relative flex items-center justify-between" role="alert">
+      <div className="flex items-center">
+        <AlertTriangle className="h-5 w-5 mr-2 flex-shrink-0" />
+        <span className="block sm:inline text-sm">{message}</span>
+      </div>
+      {isRetryable && onRetry && (
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={onRetry}
+          className="text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800/50 ml-2"
+        >
+          <RefreshCw className="h-4 w-4 mr-1" /> Reintentar
+        </Button>
+      )}
+    </div>
+  </div>
+);
 
 const markdownStyles = {
   root: "space-y-4 leading-normal text-sm md:text-base",
@@ -159,43 +189,59 @@ const MessageActions = ({
   const [copied, setCopied] = useState(false)
 
   const handleCopy = () => {
-    // Si el contenido no es un string, convertirlo
-    const textToCopy = typeof content === "string" 
-      ? content
-      : JSON.stringify(content, null, 2);
-    
-    copyToClipboard(textToCopy)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      // Si el contenido no es un string, convertirlo
+      const textToCopy = typeof content === "string" 
+        ? content
+        : JSON.stringify(content, null, 2);
+      
+      copyToClipboard(textToCopy)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      console.error("Error copying content:", error);
+      // Intentar un enfoque menos refinado
+      const fallbackText = typeof content === "string" 
+        ? content 
+        : "No se pudo copiar el contenido complejo";
+      copyToClipboard(fallbackText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   }
 
   const handleShare = (platform: string) => {
-    let url = ""
-    // Si el contenido no es un string, convertirlo
-    const textForSharing = typeof content === "string" 
-      ? content
-      : JSON.stringify(content, null, 2);
-    
-    const text = encodeURIComponent(textForSharing)
-    switch (platform) {
-      case "twitter":
-        url = `https://twitter.com/intent/tweet?text=${text}`
-        break
-      case "facebook":
-        url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
-          window.location.href
-        )}&quote=${text}`
-        break
-      case "linkedin":
-        url = `https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(
-          window.location.href
-        )}&title=Respuesta del Asistente Legal IA&summary=${text}`
-        break
-      case "whatsapp":
-        url = `https://api.whatsapp.com/send?text=${text}`
-        break
+    try {
+      let url = ""
+      // Si el contenido no es un string, convertirlo
+      const textForSharing = typeof content === "string" 
+        ? content
+        : JSON.stringify(content, null, 2);
+      
+      const text = encodeURIComponent(textForSharing)
+      switch (platform) {
+        case "twitter":
+          url = `https://twitter.com/intent/tweet?text=${text}`
+          break
+        case "facebook":
+          url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(
+            window.location.href
+          )}&quote=${text}`
+          break
+        case "linkedin":
+          url = `https://www.linkedin.com/shareArticle?mini=true&url=${encodeURIComponent(
+            window.location.href
+          )}&title=Respuesta del Asistente Legal IA&summary=${text}`
+          break
+        case "whatsapp":
+          url = `https://api.whatsapp.com/send?text=${text}`
+          break
+      }
+      window.open(url, "_blank")
+    } catch (error) {
+      console.error("Error sharing content:", error);
+      alert("No se pudo compartir el contenido. Intente copiar y compartir manualmente.");
     }
-    window.open(url, "_blank")
   }
 
   return (
@@ -436,134 +482,155 @@ interface ChatInterfaceProps {
 }
 
 // Función auxiliar para renderizar contenido de mensaje que puede ser objeto, array o string
+// Versión mejorada con mejor manejo de errores
 const renderMessageContent = (content: string | Record<string, unknown> | Array<Record<string, unknown>>) => {
-  // Si es string, usar ReactMarkdown normalmente
-  if (typeof content === "string") {
-    return (
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeRaw]}
-        components={{
-          p: ({ children }) => <p className={markdownStyles.p}>{children}</p>,
-          h1: ({ children }) => <h1 className={markdownStyles.h1}>{children}</h1>,
-          h2: ({ children }) => <h2 className={markdownStyles.h2}>{children}</h2>,
-          h3: ({ children }) => <h3 className={markdownStyles.h3}>{children}</h3>,
-          h4: ({ children }) => <h4 className={markdownStyles.h4}>{children}</h4>,
-          ul: ({ children }) => (
-            <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
-          ),
-          ol: ({ children }) => (
-            <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
-          ),
-          li: ({ children }) => <li className="leading-relaxed">{children}</li>,
-          a: ({ href, children }) => (
-            <a href={href} className={markdownStyles.a}>
-              {children}
-            </a>
-          ),
-          blockquote: ({ children }) => (
-            <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
-          ),
-          code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
-            inline ? (
-              <code className={markdownStyles.code}>{children}</code>
-            ) : (
-              <pre className={markdownStyles.pre}>
-                <code>{children}</code>
-              </pre>
-            ),                                      
-          table: ({ children }) => (
-            <div className="overflow-x-auto" style={{ width: "100%" }}>
-              <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
+  try {
+    // Si es string, usar ReactMarkdown normalmente
+    if (typeof content === "string") {
+      return (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw]}
+          components={{
+            p: ({ children }) => <p className={markdownStyles.p}>{children}</p>,
+            h1: ({ children }) => <h1 className={markdownStyles.h1}>{children}</h1>,
+            h2: ({ children }) => <h2 className={markdownStyles.h2}>{children}</h2>,
+            h3: ({ children }) => <h3 className={markdownStyles.h3}>{children}</h3>,
+            h4: ({ children }) => <h4 className={markdownStyles.h4}>{children}</h4>,
+            ul: ({ children }) => (
+              <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
+            ),
+            ol: ({ children }) => (
+              <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
+            ),
+            li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+            a: ({ href, children }) => (
+              <a href={href} className={markdownStyles.a}>
                 {children}
-              </table>
-            </div>
-          ),
-          th: ({ children }) => (
-            <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
-              {children}
-            </th>
-          ),
-          td: ({ children }) => (
-            <td className="border border-border px-3 py-2 whitespace-normal">
-              {children}
-            </td>
-          ),
-          hr: () => <hr className="my-6 border-border" />,
-          img: (props) => {
-            const { src, alt, width, height, ...rest } = props
-            if (!src) return null
-            return (
-              <Image
-                src={src!}
-                alt={alt || ""}
-                width={width ? parseInt(width.toString(), 10) : 600}
-                height={height ? parseInt(height.toString(), 10) : 400}
-                {...rest}
-                className="rounded-lg border border-border max-w-full h-auto"
-                unoptimized
-              />
-            )
-          },
-          strong: ({ children }) => (
-            <strong className="font-semibold">{children}</strong>
-          ),
-          em: ({ children }) => <em className="italic">{children}</em>,
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    );
-  }
-  
-  // Si es un array (caso Claude con tools)
-  if (Array.isArray(content)) {
-    return (
-      <div className="space-y-4">
-        {(content as Array<ContentItem>).map((item, idx) => (
-          <div key={idx} className="border-l-2 border-primary/30 pl-3 py-1 mb-3">
-            <div className="flex items-center mb-1 gap-1">
-              <span className="font-semibold text-xs">
-                {item.type === "tool_result" ? "Resultado de herramienta" : item.type}
-              </span>
-              {item.tool_use_id && (
-                <span className="text-xs text-muted-foreground">ID: {item.tool_use_id.substring(0, 10)}...</span>
-              )}
-            </div>
-            <div className="text-sm text-muted-foreground">
-              {typeof item.content === "string" ? (
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  rehypePlugins={[rehypeRaw]}
-                  className="text-xs overflow-x-auto"
-                >
-                  {item.content.length > 300 
-                    ? `${item.content.substring(0, 300)}...` 
-                    : item.content}
-                </ReactMarkdown>
+              </a>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
+            ),
+            code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
+              inline ? (
+                <code className={markdownStyles.code}>{children}</code>
               ) : (
-                <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">
-                  {JSON.stringify(item.content, null, 2)}
+                <pre className={markdownStyles.pre}>
+                  <code>{children}</code>
                 </pre>
-              )}
+              ),                                      
+            table: ({ children }) => (
+              <div className="overflow-x-auto" style={{ width: "100%" }}>
+                <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
+                  {children}
+                </table>
+              </div>
+            ),
+            th: ({ children }) => (
+              <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
+                {children}
+              </th>
+            ),
+            td: ({ children }) => (
+              <td className="border border-border px-3 py-2 whitespace-normal">
+                {children}
+              </td>
+            ),
+            hr: () => <hr className="my-6 border-border" />,
+            img: (props) => {
+              const { src, alt, width, height, ...rest } = props
+              if (!src) return null
+              try {
+                return (
+                  <Image
+                    src={src!}
+                    alt={alt || ""}
+                    width={width ? parseInt(width.toString(), 10) : 600}
+                    height={height ? parseInt(height.toString(), 10) : 400}
+                    {...rest}
+                    className="rounded-lg border border-border max-w-full h-auto"
+                    unoptimized
+                  />
+                )
+              } catch (imageError) {
+                console.warn("Error rendering image:", imageError);
+                return <span className="text-red-500">[Error al cargar imagen]</span>;
+              }
+            },
+            strong: ({ children }) => (
+              <strong className="font-semibold">{children}</strong>
+            ),
+            em: ({ children }) => <em className="italic">{children}</em>,
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      );
+    }
+    
+    // Si es un array (caso Claude con tools)
+    if (Array.isArray(content)) {
+      return (
+        <div className="space-y-4">
+          {(content as Array<ContentItem>).map((item, idx) => (
+            <div key={idx} className="border-l-2 border-primary/30 pl-3 py-1 mb-3">
+              <div className="flex items-center mb-1 gap-1">
+                <span className="font-semibold text-xs">
+                  {item.type === "tool_result" ? "Resultado de herramienta" : item.type}
+                </span>
+                {item.tool_use_id && (
+                  <span className="text-xs text-muted-foreground">ID: {item.tool_use_id.substring(0, 10)}...</span>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {typeof item.content === "string" ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
+                    className="text-xs overflow-x-auto"
+                  >
+                    {item.content.length > 300 
+                      ? `${item.content.substring(0, 300)}...` 
+                      : item.content}
+                  </ReactMarkdown>
+                ) : (
+                  <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">
+                    {JSON.stringify(item.content, null, 2)}
+                  </pre>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+      );
+    }
+    
+    // Si es un objeto y no es un array
+    if (typeof content === "object" && content !== null) {
+      return (
+        <pre className="text-xs overflow-x-auto bg-muted p-2 rounded whitespace-pre-wrap">
+          {JSON.stringify(content, null, 2)}
+        </pre>
+      );
+    }
+    
+    // Fallback
+    return <p>{String(content)}</p>;
+  } catch (error) {
+    // Si hay un error al renderizar, mostrar un mensaje genérico
+    console.error("Error rendering message content:", error);
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-md border border-red-200 dark:border-red-800">
+        <p className="text-sm font-medium mb-1">Error al mostrar el contenido</p>
+        <p className="text-xs">
+          {typeof content === "string" 
+            ? content.substring(0, 500) + (content.length > 500 ? "..." : "")
+            : "El contenido no se puede mostrar correctamente. Por favor, intente regenerar la respuesta."}
+        </p>
       </div>
     );
   }
-  
-  // Si es un objeto y no es un array
-  if (typeof content === "object" && content !== null) {
-    return (
-      <pre className="text-xs overflow-x-auto bg-muted p-2 rounded whitespace-pre-wrap">
-        {JSON.stringify(content, null, 2)}
-      </pre>
-    );
-  }
-  
-  // Fallback
-  return <p>{String(content)}</p>;
 };
 
 export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfaceProps) {
@@ -583,6 +650,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     createNewChat,
     deleteSession,
     renameSession,
+    cancelRequest,
   } = useChat()
   const { isAuthenticated, user, logout } = useAuth()
   const [isInitialView, setIsInitialView] = useState(true)
@@ -599,6 +667,25 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const isScrollingRef = useRef(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
+  // Nuevo estado para la conectividad
+  const [isOnline, setIsOnline] = useState(true)
+  // Estados para reintentar la última acción
+  const [lastUserMessage, setLastUserMessage] = useState("")
+  const [wasRegenerating, setWasRegenerating] = useState(false)
+
+  // Monitoreo de conectividad
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     console.log("ChatInterface mounted")
@@ -613,40 +700,66 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     }
   }, [isInitialView, onChatStarted])
 
+  // Mejorado para manejar errores en el scroll
   useEffect(() => {
-    const container = messagesContainerRef.current
-    if (!container) return
-    if (isLoading) {
-      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
-    } else {
-      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-      if (distanceFromBottom < 100) {
+    try {
+      const container = messagesContainerRef.current
+      if (!container) return
+      if (isLoading) {
         container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+      } else {
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+        if (distanceFromBottom < 100) {
+          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+        }
+      }
+    } catch (error) {
+      console.warn("Error scrolling container:", error)
+      // En caso de error, intentar un enfoque más directo
+      try {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: "auto" })
+        }
+      } catch (fallbackError) {
+        console.error("Failed fallback scrolling:", fallbackError)
       }
     }
-  }, [isLoading])
+  }, [isLoading, messages])
 
   const handleScroll = () => {
-    const container = messagesContainerRef.current
-    if (container) {
-      const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
-      setShowScrollButton(distanceFromBottom > 100)
+    try {
+      const container = messagesContainerRef.current
+      if (container) {
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+        setShowScrollButton(distanceFromBottom > 100)
+      }
+    } catch (error) {
+      console.warn("Error handling scroll:", error)
     }
   }
 
   const scrollToBottom = useCallback(() => {
-    if (messagesEndRef.current && !isScrollingRef.current) {
-      isScrollingRef.current = true
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
-      setTimeout(() => {
-        isScrollingRef.current = false
-      }, 500)
+    try {
+      if (messagesEndRef.current && !isScrollingRef.current) {
+        isScrollingRef.current = true
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+        setTimeout(() => {
+          isScrollingRef.current = false
+        }, 500)
+      }
+    } catch (error) {
+      console.warn("Error scrolling to bottom:", error)
+      // Fallback directo
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "auto" })
+      }
     }
   }, [])
 
   useEffect(() => {
     if (!isLoading) {
       setRegeneratingIndex(null)
+      setWasRegenerating(false)
     }
   }, [isLoading])
 
@@ -655,8 +768,25 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
       navigator.clipboard
         .writeText(text)
         .then(() => console.log("Texto copiado al portapapeles"))
-        .catch((err) => console.error("Error al copiar texto: ", err))
+        .catch((err) => {
+          console.error("Error al copiar texto: ", err)
+          // Usar fallback en caso de error
+          const textarea = document.createElement("textarea")
+          textarea.value = text
+          textarea.style.position = "fixed"
+          textarea.style.opacity = "0"
+          document.body.appendChild(textarea)
+          textarea.select()
+          try {
+            document.execCommand("copy")
+            console.log("Texto copiado con fallback")
+          } catch (err) {
+            console.error("Fallback: Error al copiar texto", err)
+          }
+          document.body.removeChild(textarea)
+        })
     } else {
+      // Fallback para navegadores sin soporte de clipboard API
       const textarea = document.createElement("textarea")
       textarea.value = text
       textarea.style.position = "fixed"
@@ -680,30 +810,89 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     if (!input.trim() || isLoading) return
+    
     const message = input
     setInput("")
     setIsInitialView(false)
     setErrorMessage(null)
+    
+    // Guardar el mensaje para posible reintento
+    setLastUserMessage(message)
+    setWasRegenerating(false)
+    
     try {
+      // Comprobar conectividad
+      if (!isOnline) {
+        setErrorMessage("No hay conexión a internet. Por favor, verifica tu conexión e intenta de nuevo.");
+        return;
+      }
+      
       console.log("Sending message:", message)
       await sendMessage(message)
     } catch (error) {
       console.error("Error sending message:", error)
-      setErrorMessage(`Error al enviar el mensaje: ${error instanceof Error ? error.message : JSON.stringify(error)}`)
+      setErrorMessage(
+        error instanceof Error 
+        ? `Error al enviar el mensaje: ${error.message}` 
+        : "Error al enviar el mensaje. Por favor, intenta de nuevo."
+      )
     } finally {
       setTimeout(scrollToBottom, 100)
     }
   }
 
+  // Función para reintentar la última operación
+  const retryLastOperation = async () => {
+    setErrorMessage(null);
+    
+    try {
+      // Comprobar conectividad
+      if (!isOnline) {
+        setErrorMessage("No hay conexión a internet. Por favor, verifica tu conexión e intenta de nuevo.");
+        return;
+      }
+      
+      if (wasRegenerating) {
+        await handleRegenerate();
+      } else if (lastUserMessage) {
+        await sendMessage(lastUserMessage);
+      } else {
+        setErrorMessage("No hay operación para reintentar.");
+      }
+    } catch (error) {
+      console.error("Error retrying operation:", error);
+      setErrorMessage(
+        error instanceof Error 
+        ? `Error al reintentar: ${error.message}` 
+        : "Error al reintentar la operación. Por favor, intenta de nuevo."
+      );
+    }
+  };
+
   const handleQuickAction = async (text: string) => {
     setInput("")
     setIsInitialView(false)
     setErrorMessage(null)
+    
+    // Guardar para posible reintento
+    setLastUserMessage(text)
+    setWasRegenerating(false)
+    
     try {
+      // Comprobar conectividad
+      if (!isOnline) {
+        setErrorMessage("No hay conexión a internet. Por favor, verifica tu conexión e intenta de nuevo.");
+        return;
+      }
+      
       await sendMessage(text)
     } catch (error) {
       console.error("Error en acción rápida:", error)
-      setErrorMessage(`Error al procesar la acción rápida: ${error instanceof Error ? error.message : String(error)}`)
+      setErrorMessage(
+        error instanceof Error 
+        ? `Error al procesar la acción rápida: ${error.message}` 
+        : "Error al procesar la acción rápida. Por favor, intenta de nuevo."
+      )
     }
   }
 
@@ -718,9 +907,29 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     if (lastAssistantIndex !== -1) {
       setRegeneratingIndex(lastAssistantIndex)
     }
+    
     const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")
     if (lastUserMessage) {
-      await sendMessage(lastUserMessage.content as string, true)
+      // Guardar para posible reintento
+      setLastUserMessage(lastUserMessage.content as string)
+      setWasRegenerating(true)
+      
+      try {
+        // Comprobar conectividad
+        if (!isOnline) {
+          setErrorMessage("No hay conexión a internet. Por favor, verifica tu conexión e intenta de nuevo.");
+          return;
+        }
+        
+        await sendMessage(lastUserMessage.content as string, true)
+      } catch (error) {
+        console.error("Error regenerating:", error)
+        setErrorMessage(
+          error instanceof Error 
+          ? `Error al regenerar: ${error.message}` 
+          : "Error al regenerar la respuesta. Por favor, intenta de nuevo."
+        )
+      }
     }
   }
 
@@ -729,10 +938,21 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
       setShowNewChatModal(true)
       return
     }
-    await createNewChat()
-    setIsInitialView(true)
-    setMessages([])
-    onNewChat?.()
+    
+    try {
+      await createNewChat()
+      setIsInitialView(true)
+      setMessages([])
+      setErrorMessage(null)
+      onNewChat?.()
+    } catch (error) {
+      console.error("Error creating new chat:", error)
+      setErrorMessage(
+        error instanceof Error 
+        ? `Error al crear nuevo chat: ${error.message}` 
+        : "Error al crear un nuevo chat. Por favor, intenta de nuevo."
+      )
+    }
   }
 
   const showMobileHeader = isMobile && (isAuthenticated || !isInitialView)
@@ -762,6 +982,13 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
       <div className="absolute inset-0 -z-10 h-full w-full bg-white dark:bg-gray-950">
         <div className="absolute bottom-0 left-0 right-0 top-0 bg-[linear-gradient(to_right,#4f4f4f2e_1px,transparent_1px),linear-gradient(to_bottom,#4f4f4f2e_1px,transparent_1px)] bg-[size:14px_24px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
       </div>
+
+      {/* Alerta de conexión */}
+      {!isOnline && (
+        <div className="fixed top-16 left-0 right-0 z-50 bg-yellow-500 text-black py-1 px-4 text-center text-sm shadow-md">
+          <p className="font-medium">Sin conexión a internet. Es posible que algunas funciones no estén disponibles.</p>
+        </div>
+      )}
 
       {/* Header móvil */}
       {showMobileHeader && (
@@ -796,11 +1023,11 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
 
       <div className="flex-1 flex flex-col transition-all duration-300 w-full">
         {errorMessage && (
-          <div className="max-w-3xl mx-auto px-4 py-2">
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative" role="alert">
-              <span className="block sm:inline">{errorMessage}</span>
-            </div>
-          </div>
+          <ErrorMessage 
+            message={errorMessage} 
+            onRetry={retryLastOperation} 
+            isRetryable={!!(lastUserMessage || wasRegenerating)}
+          />
         )}
         {isInitialView ? (
           <div className="flex-1 flex flex-col items-center justify-center p-4">
@@ -840,7 +1067,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                           type="submit"
                           size="icon"
                           className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95 bg-primary/90 hover:bg-primary"
-                          disabled={isLoading || !input.trim()}
+                          disabled={isLoading || !input.trim() || !isOnline}
                         >
                           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                         </Button>
@@ -867,6 +1094,12 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                   
                   // Detectar si hay proceso de pensamiento activo (para mostrar el botón de tareas)
                   const isThinking = processingState === "thinking" || agentTasks.some(task => task.agent === "think");
+                  
+                  // Verificar si el mensaje es un mensaje de error
+                  const isErrorMessage = 
+                    message.role === "assistant" && 
+                    typeof message.content === "string" && 
+                    message.content.includes("Error al procesar el mensaje");
                   
                   return (
                     <div key={index} className="group flex justify-center">
@@ -898,7 +1131,9 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                               className={`w-full max-w-[85%] sm:max-w-[90%] px-3 sm:px-4 md:px-6 py-2 sm:py-3 md:py-4 ${
                                 message.role === "user"
                                   ? "bg-gray-100 dark:bg-gray-800 shadow-sm"
-                                  : "bg-white dark:bg-gray-700"
+                                  : isErrorMessage
+                                    ? "bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30"
+                                    : "bg-white dark:bg-gray-700"
                               } backdrop-blur-sm flex items-center rounded-lg ${
                                 message.role === "user"
                                   ? "text-primary justify-end"
@@ -958,12 +1193,19 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                       </div>
                     )}
                     
+                    {/* Indicador de estado offline */}
+                    {!isOnline && (
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-yellow-500/90 backdrop-blur-sm py-1 px-3 rounded-full shadow-md border border-yellow-600/30 z-20">
+                        <span className="text-xs font-medium text-black">Sin conexión</span>
+                      </div>
+                    )}
+                    
                     <form onSubmit={handleSubmit} className="relative flex flex-col gap-2">
                       <div className="relative">
                         <AutoResizingTextarea
                           value={input}
                           onChange={handleInputChange}
-                          placeholder="Escribe tu consulta legal aquí..."
+                          placeholder={isOnline ? "Escribe tu consulta legal aquí..." : "Sin conexión..."}
                           onKeyDown={(e: KeyboardEvent<HTMLTextAreaElement>) => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault()
@@ -972,7 +1214,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                           }}
                           autoFocus
                           ref={textareaRef}
-                          className="min-h-[60px] md:min-h-[60px] resize-none pr-20 pl-5 py-4"
+                          className={`min-h-[60px] md:min-h-[60px] resize-none pr-20 pl-5 py-4 ${!isOnline ? 'opacity-70' : ''}`}
+                          disabled={!isOnline}
                         />
                         <div className="absolute right-2 bottom-2 flex items-center gap-2">
                           <Button
@@ -980,15 +1223,15 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                             variant="ghost"
                             size="icon"
                             className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                            disabled={isLoading || !input.trim()}
+                            disabled={isLoading || !input.trim() || !isOnline}
                           >
                             <Mic className="h-4 w-4" />
                           </Button>
                           <Button
                             type="submit"
                             size="icon"
-                            className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95 bg-primary/90 hover:bg-primary"
-                            disabled={isLoading || !input.trim()}
+                            className="rounded-full transition-transform duration-200 hover:scale-105 active:scale-95 bg-primary/90 hover:bg-primary disabled:opacity-50"
+                            disabled={isLoading || !input.trim() || !isOnline}
                           >
                             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUp className="h-4 w-4" />}
                           </Button>
@@ -1049,6 +1292,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
               })
               .catch((error) => {
                 console.error("Error loading session:", error)
+                setErrorMessage(`Error al cargar la conversación: ${error instanceof Error ? error.message : "Intenta de nuevo"}`)
               })
           }}
           onSessionDelete={(sessionId: string) => {
@@ -1058,6 +1302,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
               })
               .catch((error) => {
                 console.error("Error deleting session:", error)
+                setErrorMessage(`Error al eliminar la conversación: ${error instanceof Error ? error.message : "Intenta de nuevo"}`)
               })
           }}
           onSessionRename={(sessionId: string, newName: string) => {
@@ -1065,6 +1310,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
               .then(() => {})
               .catch((error) => {
                 console.error("Error renaming session:", error)
+                setErrorMessage(`Error al renombrar la conversación: ${error instanceof Error ? error.message : "Intenta de nuevo"}`)
               })
           }}
         />
@@ -1097,6 +1343,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                 })
                 .catch((error) => {
                   console.error("Error loading session:", error)
+                  setErrorMessage(`Error al cargar la conversación: ${error instanceof Error ? error.message : "Intenta de nuevo"}`)
                 })
             }}
             onSessionDelete={(sessionId: string) => {
@@ -1106,6 +1353,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                 })
                 .catch((error) => {
                   console.error("Error deleting session:", error)
+                  setErrorMessage(`Error al eliminar la conversación: ${error instanceof Error ? error.message : "Intenta de nuevo"}`)
                 })
             }}
             onSessionRename={(sessionId: string, newName: string) => {
@@ -1113,6 +1361,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                 .then(() => {})
                 .catch((error) => {
                   console.error("Error renaming session:", error)
+                  setErrorMessage(`Error al renombrar la conversación: ${error instanceof Error ? error.message : "Intenta de nuevo"}`)
                 })
             }}
           />
