@@ -31,6 +31,7 @@ import {
   Brain,
   RefreshCw,
   AlertTriangle,
+  X,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -955,6 +956,13 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     }
   }
 
+  // Agregar funcionalidad para detener la respuesta
+  const handleStopResponse = () => {
+    if (isLoading) {
+      cancelRequest();
+    }
+  };
+
   const showMobileHeader = isMobile && (isAuthenticated || !isInitialView)
 
   // Función para determinar qué indicador mostrar basado en el estado
@@ -1218,15 +1226,27 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                           disabled={!isOnline}
                         />
                         <div className="absolute right-2 bottom-2 flex items-center gap-2">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
-                            disabled={isLoading || !input.trim() || !isOnline}
-                          >
-                            <Mic className="h-4 w-4" />
-                          </Button>
+                          {isLoading ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={handleStopResponse}
+                              className="text-red-500 dark:text-red-400 rounded-full transition-transform duration-200 hover:scale-105 active:scale-95 hover:bg-red-100 dark:hover:bg-red-900/30"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          ) : (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground rounded-full transition-transform duration-200 hover:scale-105 active:scale-95"
+                              disabled={isLoading || !input.trim() || !isOnline}
+                            >
+                              <Mic className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             type="submit"
                             size="icon"

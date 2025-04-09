@@ -811,12 +811,12 @@ export function useChat() {
               // Estos son mensajes especiales que no deben mostrarse como mensajes del usuario
               if (msg.role === "user" && Array.isArray(msg.content)) {
                 // Verificar si TODOS los elementos del array son resultados de herramientas
-                const isToolResultsOnly = msg.content.every(item => 
+                const toolResults = msg.content.every(item => 
                   item.type === "tool_result" && item.tool_use_id
                 );
                 
                 // Si son resultados de herramientas, procesarlos pero no mostrarlos como mensajes
-                if (isToolResultsOnly) {
+                if (toolResults) {
                   // Procesar resultados para actualizar el estado de tareas
                   msg.content.forEach(item => {
                     if (item.type === "tool_result" && item.tool_use_id && item.content) {
@@ -1239,12 +1239,7 @@ export function useChat() {
                       if (msg.role === "user" && Array.isArray((msg as unknown as Record<string, unknown>).content)) {
                         const userContent = (msg as unknown as Record<string, unknown>).content as Array<Record<string, unknown>>;
                         
-                        // Verificar si todos los elementos son tool_result
-                        const isToolResultsOnly = userContent.every((item) => 
-                          item.type === "tool_result" && item.tool_use_id
-                        );
-                        
-                        // Procesar los resultados de herramientas
+                        // Verificar si todo el contenido son resultados de herramientas para procesarlos
                         processToolResults(userContent);
                       }
                       
