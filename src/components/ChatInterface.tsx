@@ -28,6 +28,7 @@ import {
   ChevronsRight,
   Mic,
   Activity,
+  Brain,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -97,13 +98,34 @@ const SourcesList = ({ sources }: { sources: Source[] }) => (
   </div>
 )
 
-const TasksList = ({ tasks }: { tasks: AgentTask[] }) => (
-  <div className="space-y-2">
-    {tasks.map((task) => (
-      <TaskAccordion key={task.id} task={task} />
-    ))}
-  </div>
-)
+const TasksList = ({ tasks }: { tasks: AgentTask[] }) => {
+  // Detectar si hay tareas de tipo "think"
+  const hasThinkingTasks = tasks.some(task => task.agent === "think");
+
+  return (
+    <div className="space-y-2">
+      {/* Sección de tareas thinking, si existen */}
+      {hasThinkingTasks && (
+        <div className="mb-6">
+          <h3 className="text-sm font-semibold text-primary mb-3 border-b pb-1">Proceso de Razonamiento</h3>
+          {tasks.filter(task => task.agent === "think").map((task) => (
+            <TaskAccordion key={task.id} task={task} />
+          ))}
+        </div>
+      )}
+      
+      {/* Sección para otras tareas */}
+      {tasks.some(task => task.agent !== "think") && (
+        <div>
+          {hasThinkingTasks && <h3 className="text-sm font-semibold text-primary mb-3 border-b pb-1">Tareas del Agente</h3>}
+          {tasks.filter(task => task.agent !== "think").map((task) => (
+            <TaskAccordion key={task.id} task={task} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 interface MessageActionsProps {
   content: string | Record<string, unknown> | Array<Record<string, unknown>>
@@ -113,6 +135,7 @@ interface MessageActionsProps {
   toggleSources?: () => void
   hasTasks?: boolean
   toggleTasks?: () => void
+  isThinking?: boolean // Nueva propiedad para detectar proceso de pensamiento
 }
 
 // Definir un tipo para los elementos dentro de los arrays de contenido
@@ -131,6 +154,7 @@ const MessageActions = ({
   toggleSources,
   hasTasks = false,
   toggleTasks,
+  isThinking = false,
 }: MessageActionsProps) => {
   const [copied, setCopied] = useState(false)
 
@@ -260,7 +284,8 @@ const MessageActions = ({
           </Tooltip>
         )}
 
-        {hasTasks && toggleTasks && (
+        {/* Mostrar el botón de tareas si hay tareas o si está en proceso de pensamiento */}
+        {(hasTasks || isThinking) && toggleTasks && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -269,11 +294,15 @@ const MessageActions = ({
                 className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
                 onClick={toggleTasks}
               >
-                <Activity className="h-4 w-4" />
+                {isThinking && !hasTasks ? (
+                  <Brain className="h-4 w-4" />
+                ) : (
+                  <Activity className="h-4 w-4" />
+                )}
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Tareas de agentes</p>
+              <p>{isThinking && !hasTasks ? "Ver razonamiento" : "Tareas de agentes"}</p>
             </TooltipContent>
           </Tooltip>
         )}
@@ -341,6 +370,9 @@ interface TasksDrawerProps {
 
 const TasksDrawer = ({ tasks, onClose }: TasksDrawerProps) => {
   const drawerRef = useRef<HTMLDivElement>(null)
+  
+  // Detectar si hay tareas de tipo "think"
+  const hasThinkingTasks = tasks.some(task => task.agent === "think");
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -372,7 +404,19 @@ const TasksDrawer = ({ tasks, onClose }: TasksDrawerProps) => {
           </button>
           <div className="flex h-full flex-col overflow-hidden bg-background/50 backdrop-blur-sm rounded-xl shadow-lg">
             <div className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/70 px-4 py-3">
-              <h2 className="text-lg font-semibold">Tareas de Agentes</h2>
+              <h2 className="text-lg font-semibold flex items-center">
+                {hasThinkingTasks ? (
+                  <>
+                    <Brain className="h-5 w-5 mr-2 text-primary" />
+                    Razonamiento y Tareas
+                  </>
+                ) : (
+                  <>
+                    <Activity className="h-5 w-5 mr-2 text-primary" />
+                    Tareas de Agentes
+                  </>
+                )}
+              </h2>
             </div>
             <div className="relative flex-1 overflow-y-auto px-4 py-6">
               <div className="space-y-6">
@@ -819,7 +863,11 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                 {messages.map((message, index) => {
                   const showThinking =
                     message.role === "assistant" &&
-                    (regeneratingIndex === index || (isLoading && index === messages.length - 1 && !message.content))
+                    (regeneratingIndex === index || (isLoading && index === messages.length - 1 && !message.content));
+                  
+                  // Detectar si hay proceso de pensamiento activo (para mostrar el botón de tareas)
+                  const isThinking = processingState === "thinking" || agentTasks.some(task => task.agent === "think");
+                  
                   return (
                     <div key={index} className="group flex justify-center">
                       <div className="w-full max-w-full sm:max-w-3xl">
@@ -874,13 +922,14 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                 toggleSources={() => setShowSources((prev) => !prev)}
                                 hasTasks={agentTasks.length > 0}
                                 toggleTasks={() => setShowTasks((prev) => !prev)}
+                                isThinking={isThinking}
                               />
                             )}
                           </div>
                         </div>
                       </div>
                     </div>
-                  )
+                  );
                 })}
                 <div ref={messagesEndRef} />
               </div>

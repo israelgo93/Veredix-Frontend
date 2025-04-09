@@ -54,6 +54,30 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     )
   }
   
+  // Procesar la consulta de pensamiento
+  const processThinkingQuery = (taskText: string): string => {
+    // Verificar si es una tarea de tipo "think"
+    if (task.agent === "think") {
+      try {
+        const parsed = tryParseJSON(taskText);
+        if (parsed && typeof parsed.thought === 'string') {
+          return parsed.thought;
+        }
+      } catch {}
+    }
+    return taskText;
+  }
+
+  // Procesar el resultado de pensamiento
+  const processThinkingResult = (resultText: string): string => {
+    // Si es un resultado de pensamiento que comienza con "Thoughts:"
+    if (task.agent === "think" && resultText.startsWith("Thoughts:")) {
+      // Eliminar el prefijo "Thoughts:" y limpiar espacios extras
+      return resultText.replace("Thoughts:", "").trim();
+    }
+    return resultText;
+  }
+  
   // Para tareas de búsqueda de conocimiento, renderiza las fuentes de forma especial
   const renderTaskResult = () => {
     // Verifica si la tarea es una búsqueda de conocimiento y tiene un resultado que parece ser JSON
@@ -80,7 +104,7 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     return (
       <div className="text-muted-foreground">
         <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw]}>
-          {task.result}
+          {processThinkingResult(task.result)}
         </ReactMarkdown>
       </div>
     )
@@ -88,6 +112,19 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   
   // Genera un resumen corto (primeras 100 caracteres) del resultado para mostrar cuando no está expandido
   const getSummary = () => {
+    // Si es una tarea de tipo "think", mostrar un resumen personalizado
+    if (task.agent === "think") {
+      try {
+        const parsed = tryParseJSON(task.task);
+        if (parsed && typeof parsed.thought === 'string') {
+          const thought = parsed.thought;
+          return thought.length > 100
+            ? thought.slice(0, 100).trim() + "..."
+            : thought;
+        }
+      } catch {}
+    }
+    
     // Si es una tarea de búsqueda de conocimiento, muestra un resumen personalizado
     if (task.agent.includes("search_knowledge") || 
         task.agent.includes("agente_buscador") || 
@@ -103,13 +140,21 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     }
     
     // Para otras tareas, muestra las primeras 100 caracteres
-    return task.result.length > 100
-      ? task.result.slice(0, 100).trim() + "..."
-      : task.result
+    const processedResult = task.agent === "think" 
+      ? processThinkingResult(task.result)
+      : task.result;
+      
+    return processedResult.length > 100
+      ? processedResult.slice(0, 100).trim() + "..."
+      : processedResult;
   }
 
   // Obtiene un título representativo para la tarea basado en el agente y contenido
   const getTaskTitle = () => {
+    if (task.agent === "think") {
+      return "Tarea del agente: think";
+    }
+    
     if (task.agent.includes("search_knowledge")) {
       return "Búsqueda en base de conocimiento";
     }
@@ -137,6 +182,11 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   
   // Extrae la consulta efectiva de la tarea
   const getTaskQuery = () => {
+    // Manejar específicamente las tareas de tipo "think"
+    if (task.agent === "think") {
+      return processThinkingQuery(task.task);
+    }
+    
     // Si la tarea incluye parámetros en formato JSON, intenta extraer la consulta
     if (task.task.includes("{\"query\":")) {
       const parsed = tryParseJSON(task.task);

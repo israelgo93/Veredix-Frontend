@@ -394,11 +394,15 @@ export function useChat() {
       
       if (callId && functionName) {
         try {
-          // Extraer el nombre del agente de la función (ejemplo: transfer_task_to_agente_buscador -> agente_buscador)
+          // Extraer el nombre del agente de la función
           let agentName = functionName;
           
+          // Manejar específicamente la herramienta "think"
+          if (functionName === "think") {
+            agentName = "think";
+          }
           // Extraer el nombre del agente si está en formato "transfer_task_to_X"
-          if (functionName.startsWith("transfer_task_to_")) {
+          else if (functionName.startsWith("transfer_task_to_")) {
             agentName = functionName.replace("transfer_task_to_", "");
           }
           
@@ -411,15 +415,25 @@ export function useChat() {
                 ? JSON.parse(call.function.arguments)
                 : call.function.arguments;
               
-              taskDescription = typeof args.task_description === 'string' 
-                ? args.task_description 
-                : JSON.stringify(args);
+              // Manejo especial para herramienta "think"
+              if (functionName === "think" && args.thought) {
+                taskDescription = JSON.stringify(args);
+              } else {
+                taskDescription = typeof args.task_description === 'string' 
+                  ? args.task_description 
+                  : JSON.stringify(args);
+              }
             } 
             // Para OpenAI
             else if (call.tool_args) {
-              taskDescription = typeof call.tool_args.task_description === 'string'
-                ? call.tool_args.task_description 
-                : JSON.stringify(call.tool_args);
+              // Manejo especial para herramienta "think"
+              if (functionName === "think" && call.tool_args.thought) {
+                taskDescription = JSON.stringify(call.tool_args);
+              } else {
+                taskDescription = typeof call.tool_args.task_description === 'string'
+                  ? call.tool_args.task_description 
+                  : JSON.stringify(call.tool_args);
+              }
             }
           } catch {
             taskDescription = typeof call.function?.arguments === 'string'
@@ -442,7 +456,6 @@ export function useChat() {
       }
     });
   }, [updateActivity]);
-
   /**
    * Procesa los resultados de herramientas (tool_result) y los asocia con sus
    * llamadas de herramientas correspondientes (tool_calls) para crear tareas completas.
@@ -453,8 +466,8 @@ export function useChat() {
     
     let resultsProcessed = false;
     
-    // Función interna para manejar los resultados de herramientas (convertida a expresión de función)
-    const handleToolResult = (toolId: string, content: string) => {
+    // Función interna para manejar los resultados de herramientas (actualizada para aceptar toolName opcional)
+    const handleToolResult = (toolId: string, content: string, toolName?: string) => {
       const pendingCall = pendingToolCalls.current.get(toolId);
       
       if (pendingCall) {
@@ -462,10 +475,13 @@ export function useChat() {
         setProcessingState("analyzing");
         updateActivity();
         
+        // Si se proporciona toolName y es "think", usar esto para la tarea
+        const agentName = toolName === "think" ? "think" : pendingCall.agent;
+        
         // Crear una nueva tarea completa
         const newTask: AgentTask = {
           id: toolId,
-          agent: pendingCall.agent,
+          agent: agentName,
           task: pendingCall.task,
           result: content,
           timestamp: new Date().toISOString()
@@ -495,8 +511,13 @@ export function useChat() {
     };
     
     toolResults.forEach(result => {
+      // Para herramienta "think" - buscar patrón específico
+      if (result.tool_name === "think" && result.tool_call_id && typeof result.content === 'string') {
+        handleToolResult(result.tool_call_id as string, result.content, "think");
+        resultsProcessed = true;
+      }
       // Estructura de Claude - resultados como parte del content en mensajes
-      if (result.type === "tool_result" && result.tool_use_id && typeof result.content === 'string') {
+      else if (result.type === "tool_result" && result.tool_use_id && typeof result.content === 'string') {
         handleToolResult(result.tool_use_id as string, result.content);
         resultsProcessed = true;
       } 
@@ -1005,8 +1026,10 @@ export function useChat() {
               
               // Procesar tool_calls desde el objeto de tools (OpenAI style)
               if (parsedData.tools && Array.isArray(parsedData.tools)) {
-                const toolObj = parsedData.tools[0]; // Normalmente hay uno a la vez
-                if (toolObj) {
+                const toolObj = parsedData.tools[0];
+                // Detección específica de herramienta "think"
+                if (toolObj && toolObj.tool_name === "think") {
+                  setProcessingState("thinking");
                   processToolCalls([toolObj as ToolCall]);
                 }
               }

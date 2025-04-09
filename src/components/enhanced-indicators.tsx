@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Circle, Loader2, ArrowRight, Database, AlertCircle } from 'lucide-react'
+import { Loader2, ArrowRight, Database, AlertCircle, Brain } from 'lucide-react'
 import type { ProcessingState } from "../hooks/useChat"
 
 // Indicador que muestra diferentes mensajes según la etapa general
@@ -90,7 +90,7 @@ export const ProcessingIndicator = ({ state, model }: ProcessingIndicatorProps) 
     },
     thinking: { 
       message: "Pensando", 
-      indicator: <Circle className="h-3 w-3 fill-zinc-400 animate-pulse" />
+      indicator: <Brain className="h-3 w-3 text-zinc-400 animate-pulse" />
     },
     streaming: { 
       message: "Respondiendo", 
@@ -174,7 +174,7 @@ export const SmartProcessingIndicator = ({
   
   // Para estados transicionales donde necesitamos un indicador genérico multi-etapa
   if (state === "thinking") {
-    return <MultiStageIndicator />;
+    return <ProcessingIndicator state={state} model={model} />;
   }
   
   // Para estados específicos, usamos el indicador de procesamiento con información detallada
