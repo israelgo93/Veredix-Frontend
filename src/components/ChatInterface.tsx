@@ -13,7 +13,6 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import {
-  //Paperclip,
   ArrowUp,
   ArrowDown,
   Copy,
@@ -37,7 +36,6 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
 import { useChat, type Source, type AgentTask } from "../hooks/useChat"
-//import { useTheme } from "next-themes"
 import AutoResizingTextarea from "./AutoResizingTextarea"
 import {
   Tooltip,
@@ -483,7 +481,6 @@ interface ChatInterfaceProps {
 }
 
 // Función auxiliar para renderizar contenido de mensaje que puede ser objeto, array o string
-// Versión mejorada con mejor manejo de errores
 const renderMessageContent = (content: string | Record<string, unknown> | Array<Record<string, unknown>>) => {
   try {
     // Si es string, usar ReactMarkdown normalmente
@@ -1194,19 +1191,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                       </div>
                     )}
                     
-                    {/* Indicador de actividad sobre el textarea */}
-                    {isLoading && processingState !== "idle" && processingState !== "streaming" && (
-                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-background/80 backdrop-blur-sm py-1 px-3 rounded-full shadow-md border border-border/30 z-20">
-                        <ProcessingIndicator state={processingState} model={currentModel} />
-                      </div>
-                    )}
-                    
-                    {/* Indicador de estado offline */}
-                    {!isOnline && (
-                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-yellow-500/90 backdrop-blur-sm py-1 px-3 rounded-full shadow-md border border-yellow-600/30 z-20">
-                        <span className="text-xs font-medium text-black">Sin conexión</span>
-                      </div>
-                    )}
+                    {/* Se eliminan los indicadores sobre el textarea */}
                     
                     <form onSubmit={handleSubmit} className="relative flex flex-col gap-2">
                       <div className="relative">
@@ -1280,10 +1265,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         <TasksDrawer tasks={agentTasks} onClose={() => setShowTasks(false)} />
       )}
 
-      {/* Renderizado del Sidebar:
-            - Para usuarios autenticados: siempre se muestra.
-            - Para usuarios no autenticados: se muestra solo si ya se ha iniciado el chat (isInitialView === false).
-      */}
+      {/* Renderizado del Sidebar */}
       {isAuthenticated ? (
         <Sidebar
           isOpen={sidebarOpen}

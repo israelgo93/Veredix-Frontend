@@ -3,80 +3,16 @@
 
 import { useState, useEffect } from "react"
 import { Loader2, ArrowRight, Database, AlertCircle, Brain } from 'lucide-react'
-import type { ProcessingState } from "../hooks/useChat"
+import type { ProcessingState } from "../hooks/types"
 
-// Indicador que muestra diferentes mensajes según la etapa general
-export const MultiStageIndicator = () => {
-  const multiStages = [
-    "Procesando",
-    "Analizando",
-    "Razonando",
-    "Preparando respuesta",
-  ]
-  const [stageIndex, setStageIndex] = useState(0)
-  const [dots, setDots] = useState("")
-  
-  useEffect(() => {
-    // Cambiar etapa cada 2.5 segundos
-    const stageInterval = setInterval(() => {
-      setStageIndex((prev) => (prev + 1) % multiStages.length)
-    }, 2500)
-    
-    // Animar puntos cada 500ms
-    const dotsInterval = setInterval(() => {
-      setDots(prev => {
-        if (prev.length >= 3) return ""
-        return prev + "."
-      })
-    }, 500)
-    
-    return () => {
-      clearInterval(stageInterval)
-      clearInterval(dotsInterval)
-    }
-  }, [multiStages.length])
-  
-  return (
-    <div className="flex items-center space-x-2 px-2 py-1 text-sm text-zinc-500 dark:text-zinc-400">
-      <div className="animate-pulse">
-        <Loader2 className="h-4 w-4 animate-spin" />
-      </div>
-      <span>{multiStages[stageIndex]}{dots}</span>
-    </div>
-  )
-}
-
-// Indicador para tareas de agente
-export const TaskGenerationIndicator = () => {
-  const [dots, setDots] = useState("")
-  
-  useEffect(() => {
-    // Animar puntos cada 500ms
-    const interval = setInterval(() => {
-      setDots(prev => {
-        if (prev.length >= 3) return ""
-        return prev + "."
-      })
-    }, 500)
-    
-    return () => clearInterval(interval)
-  }, [])
-  
-  return (
-    <div className="flex items-center space-x-2 px-2 py-1 text-sm text-zinc-500 dark:text-zinc-400">
-      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-      <span>Consultando fuentes{dots}</span>
-    </div>
-  )
-}
-
-// Indicador avanzado que muestra diferentes estados basados en processingState
-interface ProcessingIndicatorProps {
-  state: ProcessingState
-  model?: string | null
-}
-
-export const ProcessingIndicator = ({ state, model }: ProcessingIndicatorProps) => {
+// Indicador minimalista para mostrar diferentes estados de procesamiento
+export const ProcessingIndicator = ({ 
+  state, 
+  model 
+}: { 
+  state: ProcessingState,
+  model?: string | null 
+}) => {
   const [dots, setDots] = useState("")
   
   // Mapeo de estados a mensajes y animaciones
@@ -151,8 +87,31 @@ export const ProcessingIndicator = ({ state, model }: ProcessingIndicatorProps) 
   )
 }
 
-// Componente que muestra un indicador contextual según el estado actual
-// y es compatible con ambos modelos
+// Indicador para tareas de agente, más compacto y simple
+export const TaskIndicator = () => {
+  const [dots, setDots] = useState("")
+  
+  useEffect(() => {
+    // Animar puntos cada 500ms
+    const interval = setInterval(() => {
+      setDots(prev => {
+        if (prev.length >= 3) return ""
+        return prev + "."
+      })
+    }, 500)
+    
+    return () => clearInterval(interval)
+  }, [])
+  
+  return (
+    <div className="flex items-center space-x-2 px-2 py-1 text-sm text-blue-500 dark:text-blue-400">
+      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
+      <span>Consultando fuentes{dots}</span>
+    </div>
+  )
+}
+
+// Componente que selecciona el indicador adecuado según el estado
 export const SmartProcessingIndicator = ({ 
   state, 
   isGeneratingTask,
@@ -169,12 +128,7 @@ export const SmartProcessingIndicator = ({
   
   // Si estamos generando una tarea, usamos el indicador específico de tareas
   if (isGeneratingTask) {
-    return <TaskGenerationIndicator />;
-  }
-  
-  // Para estados transicionales donde necesitamos un indicador genérico multi-etapa
-  if (state === "thinking") {
-    return <ProcessingIndicator state={state} model={model} />;
+    return <TaskIndicator />;
   }
   
   // Para estados específicos, usamos el indicador de procesamiento con información detallada
