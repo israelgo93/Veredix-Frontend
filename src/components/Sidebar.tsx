@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "./theme-toggle"
 import { useState } from "react"
 import { Input } from "./ui/input"
-import type { UserSession } from "../types"
+import type { UserSession } from "../hooks/types"
 
 interface SidebarProps {
   isOpen: boolean
@@ -102,7 +102,7 @@ export function Sidebar(props: SidebarProps) {
         </Button>
       </div>
 
-      {/* Botón “Nuevo Chat” */}
+      {/* Botón "Nuevo Chat" */}
       <div className="p-4 border-b border-border">
         <button
           onClick={handleNewChat}
@@ -353,4 +353,3 @@ export function Sidebar(props: SidebarProps) {
     </>
   )
 }
-

@@ -1,6 +1,6 @@
 // src/lib/api.ts
 import { getUserId } from "./utils";
-import type { UserSession } from "../types";
+import type { UserSession, SessionData } from "../hooks/types";
 
 // Obtener la URL base desde variables de entorno
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "https://veredix.app/api/v1/playground";
@@ -70,7 +70,7 @@ export async function renameUserSession(userId: string, sessionId: string, newTi
 /**
  * Carga una sesión específica
  */
-export async function loadUserSession(userId: string, chatId: string): Promise<any> {
+export async function loadUserSession(userId: string, chatId: string): Promise<SessionData> {
   try {
     const response = await fetch(
       `${API_BASE_URL}/agents/veredix/sessions/${chatId}?user_id=${userId}`

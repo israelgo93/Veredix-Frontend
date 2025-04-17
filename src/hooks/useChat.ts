@@ -29,8 +29,13 @@ import type {
   AgentTask,
   ProcessingState,
   ToolResultItem,
-  UseChatReturn
+  UseChatReturn,
+  UserSession,
+  ToolCall
 } from "./types"
+
+// Re-export types that are used by components importing this hook
+export type { Source, AgentTask, Message, ProcessingState, UserSession }
 
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])

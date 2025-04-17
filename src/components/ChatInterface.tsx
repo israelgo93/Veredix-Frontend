@@ -35,7 +35,8 @@ import {
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
-import { useChat, type Source, type AgentTask } from "../hooks/useChat"
+import { useChat } from "../hooks/useChat"
+import type { Source, AgentTask } from "../hooks/types"
 import AutoResizingTextarea from "./AutoResizingTextarea"
 import {
   Tooltip,

@@ -1,5 +1,5 @@
 // src/lib/toolProcessors.ts
-import type { ToolCall, AgentTask, ProcessingState } from "../hooks/types";
+import type { ToolCall, AgentTask, ProcessingState, Message, ToolMessage } from "../hooks/types";
 
 /**
  * Procesa las llamadas a herramientas
@@ -220,45 +220,40 @@ export function processToolResults(
 export function processHistoricalToolResult(
   toolId: string,
   content: string,
-  rawMessages: Array<any>,
+  rawMessages: Array<Message | ToolMessage>,
   setAgentTasks: (updater: (prev: AgentTask[]) => AgentTask[]) => void
 ): void {
   try {
     // Extraer información de la herramienta del historial
     const toolCallMessage = rawMessages.find(msg => {
-      // Primero convertimos a unknown y luego a Record para evitar el error de TypeScript
-      const msgAsRecord = msg as unknown as Record<string, unknown>;
       return msg.role === "assistant" && 
-             msgAsRecord.tool_calls && 
-             Array.isArray(msgAsRecord.tool_calls) &&
-             msgAsRecord.tool_calls.some((call: Record<string, unknown>) => call.id === toolId);
+             msg.tool_calls && 
+             Array.isArray(msg.tool_calls) &&
+             msg.tool_calls.some((call) => call.id === toolId);
     });
     
     let agentName = "desconocido";
     let taskDescription = "Tarea sin descripción";
     
     if (toolCallMessage) {
-      // Usamos la misma técnica de conversión segura
-      const msgAsRecord = toolCallMessage as unknown as Record<string, unknown>;
-      
-      if (msgAsRecord.tool_calls && Array.isArray(msgAsRecord.tool_calls)) {
-        const toolCall = msgAsRecord.tool_calls.find((call: Record<string, unknown>) => call.id === toolId);
+      if (toolCallMessage.tool_calls && Array.isArray(toolCallMessage.tool_calls)) {
+        const toolCall = toolCallMessage.tool_calls.find((call) => call.id === toolId);
         
-        const toolFunction = toolCall?.function as Record<string, unknown> | undefined;
-        
-        if (toolFunction?.name) {
+        if (toolCall?.function) {
           // Extraer nombre del agente
-          agentName = toolFunction.name as string;
+          const functionName = toolCall.function.name as string;
+          agentName = functionName;
+          
           if (agentName.startsWith("transfer_task_to_")) {
             agentName = agentName.replace("transfer_task_to_", "");
           }
           
           // Extraer descripción de tarea
           try {
-            if (toolFunction?.arguments) {
-              const args = typeof toolFunction.arguments === 'string'
-                ? JSON.parse(toolFunction.arguments)
-                : toolFunction.arguments;
+            if (toolCall.function.arguments) {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments;
                 
               taskDescription = typeof args.task_description === 'string'
                 ? args.task_description
@@ -266,8 +261,8 @@ export function processHistoricalToolResult(
             }
           } catch (parseError) {
             console.warn("Error parsing tool arguments:", parseError);
-            taskDescription = typeof toolFunction?.arguments === 'string'
-              ? toolFunction.arguments
+            taskDescription = typeof toolCall.function.arguments === 'string'
+              ? toolCall.function.arguments
               : "Tarea sin descripción";
           }
         }
