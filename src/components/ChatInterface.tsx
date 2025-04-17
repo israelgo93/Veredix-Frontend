@@ -14,6 +14,7 @@ import { Card } from "@/components/ui/card"
 import { Avatar } from "@/components/ui/avatar"
 import {
   ArrowUp,
+  ArrowDown,
   Copy,
   RotateCcw,
   Share,
@@ -59,14 +60,9 @@ import {
   SmartProcessingIndicator,
   ProcessingIndicator 
 } from "./enhanced-indicators"
-// Importaciones de componentes personalizados
+// Importamos los nuevos componentes personalizados
 import TaskAccordion from "./TaskAccordion"
 import SourceAccordion from "./SourceAccordion"
-// Nuevos imports para las mejoras
-import { useSmoothScroll } from "../hooks/useSmoothScroll"
-import AnimatedMessage from "./AnimatedMessage"
-import Transition from "./ui/transition"
-import SmoothScrollButton from "./SmoothScrollButton"
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false)
@@ -84,14 +80,6 @@ interface ErrorMessageProps {
   message: string;
   onRetry?: () => void;
   isRetryable?: boolean;
-}
-
-interface ImageProps {
-  src?: string;
-  alt?: string;
-  width?: number | string;
-  height?: number | string;
-  [key: string]: unknown;
 }
 
 const ErrorMessage = ({ message, onRetry, isRetryable = true }: ErrorMessageProps) => (
@@ -493,6 +481,157 @@ interface ChatInterfaceProps {
   onNewChat?: () => void
 }
 
+// Función auxiliar para renderizar contenido de mensaje que puede ser objeto, array o string
+const renderMessageContent = (content: string | Record<string, unknown> | Array<Record<string, unknown>>) => {
+  try {
+    // Si es string, usar ReactMarkdown normalmente
+    if (typeof content === "string") {
+      return (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeRaw]}
+          components={{
+            p: ({ children }) => <p className={markdownStyles.p}>{children}</p>,
+            h1: ({ children }) => <h1 className={markdownStyles.h1}>{children}</h1>,
+            h2: ({ children }) => <h2 className={markdownStyles.h2}>{children}</h2>,
+            h3: ({ children }) => <h3 className={markdownStyles.h3}>{children}</h3>,
+            h4: ({ children }) => <h4 className={markdownStyles.h4}>{children}</h4>,
+            ul: ({ children }) => (
+              <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
+            ),
+            ol: ({ children }) => (
+              <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
+            ),
+            li: ({ children }) => <li className="leading-relaxed">{children}</li>,
+            a: ({ href, children }) => (
+              <a href={href} className={markdownStyles.a}>
+                {children}
+              </a>
+            ),
+            blockquote: ({ children }) => (
+              <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
+            ),
+            code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
+              inline ? (
+                <code className={markdownStyles.code}>{children}</code>
+              ) : (
+                <pre className={markdownStyles.pre}>
+                  <code>{children}</code>
+                </pre>
+              ),                                      
+            table: ({ children }) => (
+              <div className="overflow-x-auto" style={{ width: "100%" }}>
+                <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
+                  {children}
+                </table>
+              </div>
+            ),
+            th: ({ children }) => (
+              <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
+                {children}
+              </th>
+            ),
+            td: ({ children }) => (
+              <td className="border border-border px-3 py-2 whitespace-normal">
+                {children}
+              </td>
+            ),
+            hr: () => <hr className="my-6 border-border" />,
+            img: (props) => {
+              const { src, alt, width, height, ...rest } = props
+              if (!src) return null
+              try {
+                return (
+                  <Image
+                    src={src!}
+                    alt={alt || ""}
+                    width={width ? parseInt(width.toString(), 10) : 600}
+                    height={height ? parseInt(height.toString(), 10) : 400}
+                    {...rest}
+                    className="rounded-lg border border-border max-w-full h-auto"
+                    unoptimized
+                  />
+                )
+              } catch (imageError) {
+                console.warn("Error rendering image:", imageError);
+                return <span className="text-red-500">[Error al cargar imagen]</span>;
+              }
+            },
+            strong: ({ children }) => (
+              <strong className="font-semibold">{children}</strong>
+            ),
+            em: ({ children }) => <em className="italic">{children}</em>,
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      );
+    }
+    
+    // Si es un array (caso Claude con tools)
+    if (Array.isArray(content)) {
+      return (
+        <div className="space-y-4">
+          {(content as Array<ContentItem>).map((item, idx) => (
+            <div key={idx} className="border-l-2 border-primary/30 pl-3 py-1 mb-3">
+              <div className="flex items-center mb-1 gap-1">
+                <span className="font-semibold text-xs">
+                  {item.type === "tool_result" ? "Resultado de herramienta" : item.type}
+                </span>
+                {item.tool_use_id && (
+                  <span className="text-xs text-muted-foreground">ID: {item.tool_use_id.substring(0, 10)}...</span>
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {typeof item.content === "string" ? (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    rehypePlugins={[rehypeRaw]}
+                    className="text-xs overflow-x-auto"
+                  >
+                    {item.content.length > 300 
+                      ? `${item.content.substring(0, 300)}...` 
+                      : item.content}
+                  </ReactMarkdown>
+                ) : (
+                  <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">
+                    {JSON.stringify(item.content, null, 2)}
+                  </pre>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    
+    // Si es un objeto y no es un array
+    if (typeof content === "object" && content !== null) {
+      return (
+        <pre className="text-xs overflow-x-auto bg-muted p-2 rounded whitespace-pre-wrap">
+          {JSON.stringify(content, null, 2)}
+        </pre>
+      );
+    }
+    
+    // Fallback
+    return <p>{String(content)}</p>;
+  } catch (error) {
+    // Si hay un error al renderizar, mostrar un mensaje genérico
+    console.error("Error rendering message content:", error);
+    return (
+      <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-md border border-red-200 dark:border-red-800">
+        <p className="text-sm font-medium mb-1">Error al mostrar el contenido</p>
+        <p className="text-xs">
+          {typeof content === "string" 
+            ? content.substring(0, 500) + (content.length > 500 ? "..." : "")
+            : "El contenido no se puede mostrar correctamente. Por favor, intente regenerar la respuesta."}
+        </p>
+      </div>
+    );
+  }
+};
+
 export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfaceProps) {
   const {
     messages,
@@ -520,8 +659,11 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const isMobile = useIsMobile()
+  const isScrollingRef = useRef(false)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNewChatModal, setShowNewChatModal] = useState(false)
   // Nuevo estado para la conectividad
@@ -529,24 +671,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   // Estados para reintentar la última acción
   const [lastUserMessage, setLastUserMessage] = useState("")
   const [wasRegenerating, setWasRegenerating] = useState(false)
-
-  // Hook personalizado para gestión de scroll
-  const {
-    containerRef: messagesContainerRef,
-    messagesEndRef,
-    handleScroll,
-    scrollToBottom,
-    checkAndScrollToBottom,
-    setScrollButtonHandler
-  } = useSmoothScroll({
-    threshold: 150,
-    delay: 100
-  });
-
-  // Actualizar el handler del botón de scroll
-  useEffect(() => {
-    setScrollButtonHandler(setShowScrollButton);
-  }, [setScrollButtonHandler]);
 
   // Monitoreo de conectividad
   useEffect(() => {
@@ -575,26 +699,61 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     }
   }, [isInitialView, onChatStarted])
 
-  // Efecto para manejar el scroll automático
+  // Mejorado para manejar errores en el scroll
   useEffect(() => {
-    checkAndScrollToBottom(isLoading);
-  }, [isLoading, messages, checkAndScrollToBottom]);
-
-  // Añade esta función para permitir el scroll con el teclado
-  useEffect(() => {
-    // Especificar explícitamente que este es el KeyboardEvent global del DOM, no el de React
-    const handleKeyDown = (e: globalThis.KeyboardEvent) => {
-      // Presionar End para ir al final de la conversación
-      if (e.key === 'End' && showScrollButton) {
-        scrollToBottom();
+    try {
+      const container = messagesContainerRef.current
+      if (!container) return
+      if (isLoading) {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+      } else {
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+        if (distanceFromBottom < 100) {
+          container.scrollTo({ top: container.scrollHeight, behavior: "smooth" })
+        }
       }
-    };
-    
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [scrollToBottom, showScrollButton]);
+    } catch (error) {
+      console.warn("Error scrolling container:", error)
+      // En caso de error, intentar un enfoque más directo
+      try {
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: "auto" })
+        }
+      } catch (fallbackError) {
+        console.error("Failed fallback scrolling:", fallbackError)
+      }
+    }
+  }, [isLoading, messages])
+
+  const handleScroll = () => {
+    try {
+      const container = messagesContainerRef.current
+      if (container) {
+        const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+        setShowScrollButton(distanceFromBottom > 100)
+      }
+    } catch (error) {
+      console.warn("Error handling scroll:", error)
+    }
+  }
+
+  const scrollToBottom = useCallback(() => {
+    try {
+      if (messagesEndRef.current && !isScrollingRef.current) {
+        isScrollingRef.current = true
+        messagesEndRef.current.scrollIntoView({ behavior: "smooth" })
+        setTimeout(() => {
+          isScrollingRef.current = false
+        }, 500)
+      }
+    } catch (error) {
+      console.warn("Error scrolling to bottom:", error)
+      // Fallback directo
+      if (messagesEndRef.current) {
+        messagesEndRef.current.scrollIntoView({ behavior: "auto" })
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!isLoading) {
@@ -668,13 +827,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
       }
       
       console.log("Sending message:", message)
-      
-      // Programar un scroll suave DESPUÉS de que se actualice el estado
-      // pero ANTES de que la respuesta comience a llegar
-      setTimeout(() => {
-        scrollToBottom({ behavior: 'smooth', forceScroll: true });
-      }, 50);
-      
       await sendMessage(message)
     } catch (error) {
       console.error("Error sending message:", error)
@@ -683,6 +835,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
         ? `Error al enviar el mensaje: ${error.message}` 
         : "Error al enviar el mensaje. Por favor, intenta de nuevo."
       )
+    } finally {
+      setTimeout(scrollToBottom, 100)
     }
   }
 
@@ -825,186 +979,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     return null;
   }
 
-  // Función auxiliar para renderizar contenido de mensaje que puede ser objeto, array o string
-  const renderMessageContent = (
-    content: string | Record<string, unknown> | Array<Record<string, unknown>>,
-    animate: boolean = false,
-    status: "thinking" | "responding" | "complete" = "complete"
-  ) => {
-    try {
-      // Verificar si este es un mensaje de error
-      const isError = typeof content === "string" && content.includes("Error al procesar el mensaje");
-      
-      // Componentes para Markdown
-      const markdownComponents = {
-        p: ({ children }: React.PropsWithChildren) => <p className={markdownStyles.p}>{children}</p>,
-        h1: ({ children }: React.PropsWithChildren) => <h1 className={markdownStyles.h1}>{children}</h1>,
-        h2: ({ children }: React.PropsWithChildren) => <h2 className={markdownStyles.h2}>{children}</h2>,
-        h3: ({ children }: React.PropsWithChildren) => <h3 className={markdownStyles.h3}>{children}</h3>,
-        h4: ({ children }: React.PropsWithChildren) => <h4 className={markdownStyles.h4}>{children}</h4>,
-        ul: ({ children }: React.PropsWithChildren) => (
-          <ul className="list-disc list-inside mb-3 space-y-1">{children}</ul>
-        ),
-        ol: ({ children }: React.PropsWithChildren) => (
-          <ol className="list-decimal list-inside mb-3 space-y-1">{children}</ol>
-        ),
-        li: ({ children }: React.PropsWithChildren) => <li className="leading-relaxed">{children}</li>,
-        a: ({ href, children }: React.PropsWithChildren<{ href?: string }>) => (
-          <a href={href} className={markdownStyles.a}>
-            {children}
-          </a>
-        ),
-        blockquote: ({ children }: React.PropsWithChildren) => (
-          <blockquote className={markdownStyles.blockquote}>{children}</blockquote>
-        ),
-        code: ({ inline, children }: React.PropsWithChildren<{ inline?: boolean }>) =>
-          inline ? (
-            <code className={markdownStyles.code}>{children}</code>
-          ) : (
-            <pre className={markdownStyles.pre}>
-              <code>{children}</code>
-            </pre>
-          ),                                   
-        table: ({ children }: React.PropsWithChildren) => (
-          <div className="overflow-x-auto" style={{ width: "100%" }}>
-            <table className="min-w-[600px] table-auto border-collapse border border-border text-sm">
-              {children}
-            </table>
-          </div>
-        ),
-        th: ({ children }: React.PropsWithChildren) => (
-          <th className="border border-border px-3 py-2 text-left font-bold bg-muted whitespace-nowrap">
-            {children}
-          </th>
-        ),
-        td: ({ children }: React.PropsWithChildren) => (
-          <td className="border border-border px-3 py-2 whitespace-normal">
-            {children}
-          </td>
-        ),
-        hr: () => <hr className="my-6 border-border" />,
-        img: (props: ImageProps) => {
-          const { src, alt, width, height, ...rest } = props
-          if (!src) return null
-          try {
-            return (
-              <Image
-                src={src}
-                alt={alt || ""}
-                width={width ? parseInt(width.toString(), 10) : 600}
-                height={height ? parseInt(height.toString(), 10) : 400}
-                {...rest}
-                className="rounded-lg border border-border max-w-full h-auto"
-                unoptimized
-              />
-            )
-          } catch (imageError) {
-            console.warn("Error rendering image:", imageError);
-            return <span className="text-red-500">[Error al cargar imagen]</span>;
-          }
-        },
-        strong: ({ children }: React.PropsWithChildren) => (
-          <strong className="font-semibold">{children}</strong>
-        ),
-        em: ({ children }: React.PropsWithChildren) => <em className="italic">{children}</em>,
-      };
-
-      // Si es string, usar AnimatedMessage
-      if (typeof content === "string") {
-        // Verificar si el contenido es muy extenso y la respuesta está en progreso
-        if (content.length > 20000 && status !== "complete") {
-          return (
-            <div>
-              <AnimatedMessage
-                content={content.slice(0, 20000)}
-                isAnimated={animate && status === "responding"}
-                isComplete={(status as "thinking" | "responding" | "complete") === "complete"}
-                markdownComponents={markdownComponents}
-                className={isError ? "text-red-500" : ""}
-              />
-              <div className="flex items-center justify-center py-2 text-sm text-muted-foreground animate-pulse">
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Cargando más contenido...
-              </div>
-            </div>
-          );
-        }
-        
-        return (
-          <AnimatedMessage
-            content={content}
-            isAnimated={animate && status === "responding"}
-            isComplete={status === "complete"}
-            markdownComponents={markdownComponents}
-            className={isError ? "text-red-500" : ""}
-          />
-        );
-      }
-      
-      // Si es un array (caso Claude con tools)
-      if (Array.isArray(content)) {
-        return (
-          <div className="space-y-4">
-            {(content as Array<ContentItem>).map((item, idx) => (
-              <div key={idx} className="border-l-2 border-primary/30 pl-3 py-1 mb-3">
-                <div className="flex items-center mb-1 gap-1">
-                  <span className="font-semibold text-xs">
-                    {item.type === "tool_result" ? "Resultado de herramienta" : item.type}
-                  </span>
-                  {item.tool_use_id && (
-                    <span className="text-xs text-muted-foreground">ID: {item.tool_use_id.substring(0, 10)}...</span>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {typeof item.content === "string" ? (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      rehypePlugins={[rehypeRaw]}
-                      className="text-xs overflow-x-auto"
-                    >
-                      {item.content.length > 300 
-                        ? `${item.content.substring(0, 300)}...` 
-                        : item.content}
-                    </ReactMarkdown>
-                  ) : (
-                    <pre className="text-xs overflow-x-auto bg-muted p-2 rounded">
-                      {JSON.stringify(item.content, null, 2)}
-                    </pre>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        );
-      }
-      
-      // Si es un objeto y no es un array
-      if (typeof content === "object" && content !== null) {
-        return (
-          <pre className="text-xs overflow-x-auto bg-muted p-2 rounded whitespace-pre-wrap">
-            {JSON.stringify(content, null, 2)}
-          </pre>
-        );
-      }
-      
-      // Fallback
-      return <p>{String(content)}</p>;
-    } catch (error) {
-      // Si hay un error al renderizar, mostrar un mensaje genérico
-      console.error("Error rendering message content:", error);
-      return (
-        <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200 rounded-md border border-red-200 dark:border-red-800">
-          <p className="text-sm font-medium mb-1">Error al mostrar el contenido</p>
-          <p className="text-xs">
-            {typeof content === "string" 
-              ? content.substring(0, 500) + (content.length > 500 ? "..." : "")
-              : "El contenido no se puede mostrar correctamente. Por favor, intente regenerar la respuesta."}
-          </p>
-        </div>
-      );
-    }
-  };
-
   return (
     <div
       className="flex bg-white dark:bg-gray-900 text-sm overflow-hidden fixed inset-x-0 bottom-0"
@@ -1116,7 +1090,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
             <div
               ref={messagesContainerRef}
               onScroll={handleScroll}
-              className="relative flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-4 lg:p-6 bg-white dark:bg-gray-900 scrollbar-slim messages-container"
+              className="relative flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-4 lg:p-6 bg-white dark:bg-gray-900"
             >
               <div className="max-w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl mx-auto space-y-4 sm:space-y-6 md:space-y-8">
                 {messages.map((message, index) => {
@@ -1134,15 +1108,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                     message.content.includes("Error al procesar el mensaje");
                   
                   return (
-                    <Transition
-                      key={index}
-                      show={true}
-                      appear={true}
-                      enterFrom="opacity-0 translate-y-2"
-                      enterTo="opacity-100 translate-y-0"
-                      duration={300}
-                      className="group flex justify-center"
-                    >
+                    <div key={index} className="group flex justify-center">
                       <div className="w-full max-w-full sm:max-w-3xl">
                         <div
                           className={`flex items-start gap-2 sm:gap-3 md:gap-4 ${
@@ -1184,11 +1150,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                 getThinkingIndicator(index)
                               ) : (
                                 <div className="prose prose-neutral dark:prose-invert max-w-full overflow-x-hidden text-xs sm:text-sm md:text-base">
-                                  {renderMessageContent(
-                                    message.content, 
-                                    message.animate, 
-                                    message.status || "complete"
-                                  )}
+                                  {renderMessageContent(message.content)}
                                 </div>
                               )}
                             </div>
@@ -1207,10 +1169,10 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                           </div>
                         </div>
                       </div>
-                    </Transition>
+                    </div>
                   );
                 })}
-                <div ref={messagesEndRef} className="h-1" />
+                <div ref={messagesEndRef} />
               </div>
             </div>
 
@@ -1218,13 +1180,19 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
               <div className="max-w-3xl mx-auto px-3 md:px-4 py-3 md:py-4">
                 <Card className="p-0 shadow-lg mx-auto w-full bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-2xl border-0 relative">
                   <div className="relative flex flex-col gap-2 p-3 md:p-4">
-                    {/* Reemplazar el botón de ScrollToBottom con nuestro nuevo componente */}
-                    <SmoothScrollButton
-                      show={showScrollButton}
-                      onClick={scrollToBottom}
-                      containerRef={messagesContainerRef}
-                      rootClassName="-top-12"
-                    />
+                    {showScrollButton && (
+                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 z-50">
+                        <button
+                          className="shadow-lg bg-background/90 hover:bg-muted/90 flex items-center justify-center rounded-full text-primary drop-shadow-md p-2.5 backdrop-blur-sm transition-all duration-200 ease-in-out"
+                          type="button"
+                          onClick={scrollToBottom}
+                        >
+                          <ArrowDown className="h-4 w-4" />
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Se eliminan los indicadores sobre el textarea */}
                     
                     <form onSubmit={handleSubmit} className="relative flex flex-col gap-2">
                       <div className="relative">

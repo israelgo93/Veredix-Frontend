@@ -1,9 +1,6 @@
 // src/lib/messageProcessors.ts
 import type { ApiResponse, Message, ToolMessage, Source } from "../hooks/types";
 
-// Umbral mínimo para actualizar el contenido (ms)
-const UPDATE_THROTTLE = 50;
-
 /**
  * Procesa un chunk de texto para extraer objetos JSON válidos
  */
@@ -104,7 +101,6 @@ export function processJsonObjects(
 
 /**
  * Actualiza el mensaje del asistente con el contenido proporcionado
- * aplicando animación y throttling inteligente
  */
 export function updateAssistantMessage(
   messages: Message[],
@@ -118,16 +114,6 @@ export function updateAssistantMessage(
       ? newMessages.findLastIndex((m) => m.role === "assistant")
       : newMessages.length - 1;
 
-    const now = Date.now();
-    const lastMessage = lastAssistantIndex !== -1 ? newMessages[lastAssistantIndex] : null;
-    const lastUpdateTime = lastMessage?.lastUpdated || 0;
-    const shouldThrottle = (now - lastUpdateTime) < UPDATE_THROTTLE && status !== "complete";
-
-    // Si el throttling está activo y no es un estado final, omitir la actualización
-    if (shouldThrottle && lastMessage && lastMessage.content === content) {
-      return newMessages;
-    }
-
     // Manejar caso especial: contenido vacío en estado "responding"
     if (content.trim() === "" && status === "responding") {
       // No actualizar con contenido vacío a menos que sea "thinking" o "complete"
@@ -136,47 +122,24 @@ export function updateAssistantMessage(
         newMessages[lastAssistantIndex] = {
           ...newMessages[lastAssistantIndex],
           status,
-          lastUpdated: now,
         };
       } else if (!regenerate) {
         // Si necesitamos un nuevo mensaje pero el contenido está vacío,
         // crear uno con un espacio o placeholder
-        newMessages.push({ 
-          role: "assistant", 
-          content: " ", 
-          status,
-          animate: true,
-          lastUpdated: now
-        });
+        newMessages.push({ role: "assistant", content: " ", status });
       }
       return newMessages;
     }
 
     // Caso normal: actualizar mensaje existente o crear uno nuevo
     if (lastAssistantIndex !== -1 && newMessages[lastAssistantIndex].role === "assistant") {
-      // Si es una actualización de contenido, no activar animación
-      const wasEmpty = !newMessages[lastAssistantIndex].content || 
-                      newMessages[lastAssistantIndex].content === " ";
-      
-      // Decidir si mantener la animación existente o asignar una nueva
-      const animate = wasEmpty && status === "responding";
-      
       newMessages[lastAssistantIndex] = {
         ...newMessages[lastAssistantIndex],
         content,
         status,
-        animate, // Solo animamos en la primera aparición significativa
-        lastUpdated: now,
       };
     } else if (!regenerate) {
-      // Crear nuevo mensaje con animación activada
-      newMessages.push({ 
-        role: "assistant", 
-        content, 
-        status,
-        animate: true,
-        lastUpdated: now
-      });
+      newMessages.push({ role: "assistant", content, status });
     }
 
     return newMessages;
@@ -186,8 +149,7 @@ export function updateAssistantMessage(
     return messages.concat({ 
       role: "assistant", 
       content: content || "Error al actualizar mensaje", 
-      status,
-      lastUpdated: Date.now()
+      status 
     });
   }
 }

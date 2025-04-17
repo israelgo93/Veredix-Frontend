@@ -5,8 +5,6 @@ export interface Message {
   content: string | Record<string, unknown> | Array<Record<string, unknown>>
   status?: "thinking" | "responding" | "complete"
   tool_call_id?: string
-  animate?: boolean  // Nueva propiedad para animar mensajes nuevos
-  lastUpdated?: number // Para throttling de animaciones
   [key: string]: unknown  // Añadida index signature para compatibilidad
 }
 
@@ -103,13 +101,6 @@ export interface ToolCall {
   tool_args?: Record<string, unknown>
   content?: string
   tool_call_error?: boolean
-}
-
-export interface ScrollOptions {
-  behavior?: 'auto' | 'smooth'
-  threshold?: number
-  delay?: number
-  forceScroll?: boolean
 }
 
 export interface UseChatReturn {
