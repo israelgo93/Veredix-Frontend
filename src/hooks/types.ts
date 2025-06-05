@@ -145,6 +145,114 @@ export interface TeamTool {
   external_execution_required: boolean | null
 }
 
+// Nuevo tipo para Teams Runs (estructura de OpenAI)
+export interface TeamRun {
+  message: {
+    role: string
+    content: string
+    created_at: number
+    from_history: boolean
+    stop_after_tool_call: boolean
+  }
+  response: {
+    event: string
+    model: string
+    run_id: string
+    content: string
+    metrics?: {
+      time?: number | number[]
+      audio_tokens?: number | number[]
+      input_tokens?: number | number[]
+      total_tokens?: number | number[]
+      cached_tokens?: number | number[]
+      output_tokens?: number | number[]
+      prompt_tokens?: number | number[]
+      reasoning_tokens?: number | number[]
+      completion_tokens?: number | number[]
+      cache_write_tokens?: number | number[]
+      input_audio_tokens?: number | number[]
+      output_audio_tokens?: number | number[]
+      time_to_first_token?: number | number[]
+      prompt_tokens_details?: Array<{
+        audio_tokens?: number
+        cached_tokens?: number
+      }>
+      completion_tokens_details?: Array<{
+        audio_tokens?: number
+        reasoning_tokens?: number
+        accepted_prediction_tokens?: number
+        rejected_prediction_tokens?: number
+      }>
+    }
+    team_id?: string
+    messages?: Array<Message | ToolMessage>
+    created_at: number
+    session_id: string
+    content_type: string
+    model_provider: string
+    member_responses: MemberResponse[]
+    formatted_tool_calls?: string[]
+    reasoning_content?: string
+    extra_data?: ExtraData
+    tools?: Array<TeamTool>
+  }
+}
+
+// Tipo para datos de sesión de Teams
+export interface TeamSessionData {
+  session_id: string
+  team_session_id: string | null
+  team_id: string
+  user_id: string
+  team_data: {
+    mode: string
+    name: string
+    model: {
+      id: string
+      name: string
+      provider: string
+    }
+    team_id: string
+  }
+  session_data: {
+    session_state: {
+      current_user_id: string
+      current_session_id: string
+    }
+    session_metrics: {
+      time: number
+      timer: null
+      audio_tokens: number
+      input_tokens: number
+      total_tokens: number
+      cached_tokens: number
+      output_tokens: number
+      prompt_tokens: number
+      reasoning_tokens: number
+      completion_tokens: number
+      additional_metrics: null
+      cache_write_tokens: number
+      input_audio_tokens: number
+      output_audio_tokens: number
+      time_to_first_token: number
+      prompt_tokens_details: {
+        audio_tokens: number
+        cached_tokens: number
+      }
+      completion_tokens_details: {
+        audio_tokens: number
+        reasoning_tokens: number
+        accepted_prediction_tokens: number
+        rejected_prediction_tokens: number
+      }
+    }
+  }
+  extra_data: null
+  created_at: number
+  updated_at: number
+  runs: TeamRun[]
+}
+
 export interface ApiResponse {
   content: string | Record<string, unknown> | Array<Record<string, unknown>>
   content_type: string
@@ -231,31 +339,57 @@ export interface UseChatReturn {
   createNewChat: () => Promise<void>;
 }
 
+// Tipo unificado para datos de sesión (Teams o Agents)
 export interface SessionData {
-memory?: {
-  messages?: Array<Record<string, unknown>>;
-  runs?: Array<Record<string, unknown>>;
+  // Estructura de Agents (Claude)
+  memory?: {
+    messages?: Array<Record<string, unknown>>;
+    runs?: Array<Record<string, unknown>>;
+    [key: string]: unknown;
+  };
+  
+  // Estructura de Teams (OpenAI)
+  runs?: TeamRun[];
+  team_data?: {
+    mode: string;
+    name: string;
+    model: {
+      id: string;
+      name: string;
+      provider: string;
+    };
+    team_id: string;
+  };
+  session_data?: {
+    session_state: {
+      current_user_id: string;
+      current_session_id: string;
+    };
+    session_metrics: Record<string, unknown>;
+  };
+  
+  // Campos comunes
+  session_id?: string;
+  agent_id?: string;  // Mantener para compatibilidad
+  team_id?: string;   // Nuevo campo para teams
+  agent_data?: Record<string, unknown>;
+  extra_data?: ExtraData | null;
+  created_at?: number;
+  updated_at?: number;
   [key: string]: unknown;
-};
-session_id?: string;
-agent_id?: string;  // Mantener para compatibilidad
-team_id?: string;   // Nuevo campo para teams
-agent_data?: Record<string, unknown>;
-session_data?: Record<string, unknown>;
-[key: string]: unknown;
 }
 
 // Ahora HistoricalMessage es compatible con Message y ToolMessage
 export interface HistoricalMessage {
-role: string;
-content?: string | Record<string, unknown> | Array<Record<string, unknown>>;
-tool_calls?: Array<{
-  id: string;
-  function?: {
-    name: string;
-    arguments: string | Record<string, unknown>;
-  };
+  role: string;
+  content?: string | Record<string, unknown> | Array<Record<string, unknown>>;
+  tool_calls?: Array<{
+    id: string;
+    function?: {
+      name: string;
+      arguments: string | Record<string, unknown>;
+    };
+    [key: string]: unknown;
+  }>;
   [key: string]: unknown;
-}>;
-[key: string]: unknown;
 }

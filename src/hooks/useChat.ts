@@ -36,7 +36,8 @@ import type {
   ToolResultItem,
   UseChatReturn,
   UserSession,
-  ToolCall
+  ToolCall,
+  TeamRun
 } from "./types"
 
 // Re-export types that are used by components importing this hook
@@ -206,6 +207,71 @@ export function useChat(): UseChatReturn {
     }
   }, [authSession])
 
+  // Función para procesar runs de Teams (OpenAI)
+  const processTeamRuns = (runs: TeamRun[]): Message[] => {
+    const conversationMessages: Message[] = [];
+    
+    runs.forEach(run => {
+      try {
+        // Agregar mensaje del usuario
+        if (run.message && run.message.content) {
+          conversationMessages.push({
+            role: "user",
+            content: run.message.content,
+            status: "complete"
+          });
+        }
+        
+        // Agregar respuesta del asistente
+        if (run.response && run.response.content) {
+          conversationMessages.push({
+            role: "assistant",
+            content: run.response.content,
+            status: "complete"
+          });
+        }
+        
+        // Procesar member_responses para extraer fuentes y tareas
+        if (run.response?.member_responses) {
+          processMemberResponses(
+            run.response.member_responses,
+            setAgentTasks,
+            setSources,
+            currentChatId,
+            processedMemberIds.current
+          );
+        }
+        
+        // Procesar formatted_tool_calls
+        if (run.response?.formatted_tool_calls) {
+          processFormattedToolCalls(run.response.formatted_tool_calls, setAgentTasks);
+        }
+        
+        // Procesar reasoning_content
+        if (run.response?.reasoning_content) {
+          processReasoningContent(run.response.reasoning_content, setReasoningSteps);
+        }
+        
+        // Procesar referencias en extra_data
+        if (run.response?.extra_data?.references) {
+          const newSources = processSourcesFromReferences(
+            run.response.extra_data.references,
+            currentChatId,
+            processedReferenceIds.current
+          );
+          
+          if (newSources.length > 0) {
+            setSources(prev => [...prev, ...newSources]);
+          }
+        }
+      } catch (runError) {
+        console.warn("Error processing team run:", runError);
+      }
+    });
+    
+    return conversationMessages;
+  };
+
   // Cargar una sesión específica
   const loadSession = async (chatId: string) => {
     try {
@@ -213,12 +279,10 @@ export function useChat(): UseChatReturn {
       
       const sessionData = await loadUserSession(currentUserId!, chatId);
       
-      if (!sessionData || !sessionData.memory) {
-        throw new Error("Invalid session data received")
+      if (!sessionData) {
+        throw new Error("No session data received")
       }
       
-      const rawMessages = (sessionData.memory?.messages || []) as Array<Message | ToolMessage>
-
       // Reiniciamos las fuentes, tareas, reasoning steps y los conjuntos de procesados
       setSources([])
       setAgentTasks([])
@@ -231,170 +295,187 @@ export function useChat(): UseChatReturn {
       retryCountRef.current = 0
       lastValidChunkRef.current = ""
 
-      // 1. Filtrar y procesar mensajes de la conversación (user / assistant)
-      const filteredMessages = rawMessages
-        .filter(
-          (msg) => {
-            try {
-              // Filtrar mensajes nulos
-              if (msg.content == null) return false;
-              
-              // Filtrar mensajes "user" que contienen resultados de herramientas
-              if (msg.role === "user" && Array.isArray(msg.content)) {
-                // Verificar si TODOS los elementos del array son resultados de herramientas
-                const toolResults = msg.content.every(item => 
-                  item.type === "tool_result" && item.tool_use_id
-                );
-                
-                // Si son resultados de herramientas, procesarlos pero no mostrarlos como mensajes
-                if (toolResults) {
-                  // Procesar resultados para actualizar el estado de tareas
-                  msg.content.forEach(item => {
-                    if (item.type === "tool_result" && item.tool_use_id && item.content) {
-                      processHistoricalToolResult(
-                        item.tool_use_id as string, 
-                        item.content as string, 
-                        rawMessages,
-                        setAgentTasks
-                      );
-                    }
-                  });
-                  // Excluir este mensaje de la conversación visible
-                  return false;
-                }
-              }
-              
-              // Incluir todos los demás mensajes de usuario y asistente
-              return (msg.role === "user" || msg.role === "assistant");
-            } catch (filterError) {
-              console.error("Error filtering message:", filterError);
-              // En caso de error, excluir el mensaje
-              return false;
-            }
-          }
-        );
+      let conversationMessages: Message[] = [];
 
-      // 2. Identificar y combinar respuestas fragmentadas del asistente
-      const consolidatedMessages: Array<Message | ToolMessage> = [];
-      
-      try {
-        // Map para seguir la conversación por pares (usuario-asistente)
-        const conversationPairs: Array<{user: Message | null, assistant: Message | null}> = [];
-        let currentPair: {user: Message | null, assistant: Message | null} = {user: null, assistant: null};
-        
-        // Primero, organizar mensajes en pares de usuario-asistente
-        filteredMessages.forEach((msg) => {
-          try {
-            if (msg.role === "user") {
-              // Si hay un par previo incompleto, agregarlo antes de comenzar uno nuevo
-              if (currentPair.user || currentPair.assistant) {
-                conversationPairs.push(currentPair);
+      // Determinar si es estructura de Teams (OpenAI) o Agents (Claude)
+      if (sessionData.runs && Array.isArray(sessionData.runs)) {
+        // Estructura de Teams (OpenAI)
+        console.log("Processing Teams session structure");
+        conversationMessages = processTeamRuns(sessionData.runs as TeamRun[]);
+      } else if (sessionData.memory?.messages) {
+        // Estructura de Agents (Claude) - código existente
+        console.log("Processing Agents session structure");
+        const rawMessages = sessionData.memory.messages as Array<Message | ToolMessage>;
+
+        // Filtrar y procesar mensajes de la conversación (user / assistant)
+        const filteredMessages = rawMessages
+          .filter(
+            (msg) => {
+              try {
+                // Filtrar mensajes nulos
+                if (msg.content == null) return false;
+                
+                // Filtrar mensajes "user" que contienen resultados de herramientas
+                if (msg.role === "user" && Array.isArray(msg.content)) {
+                  // Verificar si TODOS los elementos del array son resultados de herramientas
+                  const toolResults = msg.content.every(item => 
+                    item.type === "tool_result" && item.tool_use_id
+                  );
+                  
+                  // Si son resultados de herramientas, procesarlos pero no mostrarlos como mensajes
+                  if (toolResults) {
+                    // Procesar resultados para actualizar el estado de tareas
+                    msg.content.forEach(item => {
+                      if (item.type === "tool_result" && item.tool_use_id && item.content) {
+                        processHistoricalToolResult(
+                          item.tool_use_id as string, 
+                          item.content as string, 
+                          rawMessages,
+                          setAgentTasks
+                        );
+                      }
+                    });
+                    // Excluir este mensaje de la conversación visible
+                    return false;
+                  }
+                }
+                
+                // Incluir todos los demás mensajes de usuario y asistente
+                return (msg.role === "user" || msg.role === "assistant");
+              } catch (filterError) {
+                console.error("Error filtering message:", filterError);
+                // En caso de error, excluir el mensaje
+                return false;
               }
-              // Comenzar un nuevo par con este mensaje de usuario
-              currentPair = {user: msg as Message, assistant: null};
-            } 
-            else if (msg.role === "assistant") {
-              // Si ya hay un asistente en el par actual, es una respuesta fragmentada
-              if (currentPair.assistant) {
-                // Solo nos quedamos con la respuesta final (la que tiene contenido completo)
-                // Esto resuelve el problema de mostrar mensajes preliminares
-                if (typeof msg.content === 'string' && 
-                    typeof currentPair.assistant.content === 'string' && 
-                    msg.content.length > currentPair.assistant.content.length) {
+            }
+          );
+
+        // Identificar y combinar respuestas fragmentadas del asistente
+        const consolidatedMessages: Array<Message | ToolMessage> = [];
+        
+        try {
+          // Map para seguir la conversación por pares (usuario-asistente)
+          const conversationPairs: Array<{user: Message | null, assistant: Message | null}> = [];
+          let currentPair: {user: Message | null, assistant: Message | null} = {user: null, assistant: null};
+          
+          // Primero, organizar mensajes en pares de usuario-asistente
+          filteredMessages.forEach((msg) => {
+            try {
+              if (msg.role === "user") {
+                // Si hay un par previo incompleto, agregarlo antes de comenzar uno nuevo
+                if (currentPair.user || currentPair.assistant) {
+                  conversationPairs.push(currentPair);
+                }
+                // Comenzar un nuevo par con este mensaje de usuario
+                currentPair = {user: msg as Message, assistant: null};
+              } 
+              else if (msg.role === "assistant") {
+                // Si ya hay un asistente en el par actual, es una respuesta fragmentada
+                if (currentPair.assistant) {
+                  // Solo nos quedamos con la respuesta final (la que tiene contenido completo)
+                  // Esto resuelve el problema de mostrar mensajes preliminares
+                  if (typeof msg.content === 'string' && 
+                      typeof currentPair.assistant.content === 'string' && 
+                      msg.content.length > currentPair.assistant.content.length) {
+                    currentPair.assistant = msg as Message;
+                  }
+                } else {
+                  // Primera respuesta del asistente para el mensaje actual
                   currentPair.assistant = msg as Message;
                 }
-              } else {
-                // Primera respuesta del asistente para el mensaje actual
-                currentPair.assistant = msg as Message;
               }
+            } catch (msgError) {
+              console.warn("Error processing message in pair organization:", msgError);
             }
-          } catch (msgError) {
-            console.warn("Error processing message in pair organization:", msgError);
-          }
-        });
-        
-        // Agregar el último par si existe
-        if (currentPair.user || currentPair.assistant) {
-          conversationPairs.push(currentPair);
-        }
-        
-        // Convertir los pares en una secuencia lineal de mensajes
-        conversationPairs.forEach(pair => {
-          if (pair.user) consolidatedMessages.push(pair.user);
-          if (pair.assistant) consolidatedMessages.push(pair.assistant);
-        });
-      } catch (consolidationError) {
-        console.error("Error consolidating messages:", consolidationError);
-        // En caso de error, usar los mensajes filtrados directamente
-        filteredMessages.forEach(msg => consolidatedMessages.push(msg));
-      }
-
-      // 3. Procesar contenido de los mensajes consolidados
-      const conversationMessages: Message[] = consolidatedMessages.map((msg) => {
-        try {
-          // Procesar contenido que no es string
-          let processedContent = msg.content;
+          });
           
-          // Si content es un array (formato de Claude para tools)
-          if (Array.isArray(msg.content)) {
-            // Extraer el contenido relevante de cada elemento del array
-            processedContent = (msg.content as Array<ToolResultItem>).map((item) => {
-              try {
-                if (item.type === "tool_result" && typeof item.content === "string") {
-                  const shortContent = item.content.length > 100 
-                    ? `${item.content.substring(0, 100)}...` 
-                    : item.content;
-                  return `[Resultado de herramienta: ${shortContent}]`;
-                }
-                return JSON.stringify(item);
-              } catch (itemError) {
-                console.warn("Error processing array item:", itemError);
-                return "[Error en el contenido]";
-              }
-            }).join("\n\n");
-          } 
-          // Si content es un objeto (otro caso posible)
-          else if (typeof msg.content === "object" && msg.content !== null) {
-            processedContent = JSON.stringify(msg.content);
+          // Agregar el último par si existe
+          if (currentPair.user || currentPair.assistant) {
+            conversationPairs.push(currentPair);
           }
           
-          return {
-            role: msg.role as "user" | "assistant",
-            content: processedContent,
-            status: "complete",
-            tool_call_id: msg.tool_call_id,
-          };
-        } catch (contentError) {
-          console.error("Error processing message content:", contentError);
-          // En caso de error, devolver un mensaje de error
-          return {
-            role: msg.role as "user" | "assistant",
-            content: "Error al procesar este mensaje",
-            status: "complete",
-          };
+          // Convertir los pares en una secuencia lineal de mensajes
+          conversationPairs.forEach(pair => {
+            if (pair.user) consolidatedMessages.push(pair.user);
+            if (pair.assistant) consolidatedMessages.push(pair.assistant);
+          });
+        } catch (consolidationError) {
+          console.error("Error consolidating messages:", consolidationError);
+          // En caso de error, usar los mensajes filtrados directamente
+          filteredMessages.forEach(msg => consolidatedMessages.push(msg));
         }
-      });
 
-      // Procesar mensajes para extraer fuentes
-      rawMessages.forEach(msg => {
-        try {
-          // Procesar fuentes de mensajes "tool"
-          if (msg.role === "tool") {
-            const newSources = processSourcesFromToolMessage(
-              msg as ToolMessage, 
-              currentChatId,
-              sessionData?.session_id,
-              processedToolIds.current
-            );
+        // Procesar contenido de los mensajes consolidados
+        conversationMessages = consolidatedMessages.map((msg) => {
+          try {
+            // Procesar contenido que no es string
+            let processedContent = msg.content;
             
-            if (newSources.length > 0) {
-              setSources(prev => [...prev, ...newSources]);
+            // Si content es un array (formato de Claude para tools)
+            if (Array.isArray(msg.content)) {
+              // Extraer el contenido relevante de cada elemento del array
+              processedContent = (msg.content as Array<ToolResultItem>).map((item) => {
+                try {
+                  if (item.type === "tool_result" && typeof item.content === "string") {
+                    const shortContent = item.content.length > 100 
+                      ? `${item.content.substring(0, 100)}...` 
+                      : item.content;
+                    return `[Resultado de herramienta: ${shortContent}]`;
+                  }
+                  return JSON.stringify(item);
+                } catch (itemError) {
+                  console.warn("Error processing array item:", itemError);
+                  return "[Error en el contenido]";
+                }
+              }).join("\n\n");
+            } 
+            // Si content es un objeto (otro caso posible)
+            else if (typeof msg.content === "object" && msg.content !== null) {
+              processedContent = JSON.stringify(msg.content);
             }
+            
+            return {
+              role: msg.role as "user" | "assistant",
+              content: processedContent,
+              status: "complete",
+              tool_call_id: msg.tool_call_id,
+            };
+          } catch (contentError) {
+            console.error("Error processing message content:", contentError);
+            // En caso de error, devolver un mensaje de error
+            return {
+              role: msg.role as "user" | "assistant",
+              content: "Error al procesar este mensaje",
+              status: "complete",
+            };
           }
-        } catch (msgProcessError) {
-          console.warn("Error processing message for sources:", msgProcessError);
-        }
-      });
+        });
+
+        // Procesar mensajes para extraer fuentes
+        rawMessages.forEach(msg => {
+          try {
+            // Procesar fuentes de mensajes "tool"
+            if (msg.role === "tool") {
+              const newSources = processSourcesFromToolMessage(
+                msg as ToolMessage, 
+                currentChatId,
+                sessionData?.session_id,
+                processedToolIds.current
+              );
+              
+              if (newSources.length > 0) {
+                setSources(prev => [...prev, ...newSources]);
+              }
+            }
+          } catch (msgProcessError) {
+            console.warn("Error processing message for sources:", msgProcessError);
+          }
+        });
+      } else {
+        // Estructura desconocida
+        console.warn("Unknown session structure:", sessionData);
+        throw new Error("Unknown session data structure");
+      }
 
       // Actualizar mensajes de la conversación
       setMessages(conversationMessages)

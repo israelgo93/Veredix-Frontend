@@ -127,14 +127,14 @@ export function processToolCalls(
           }
         }
         
-        // Extraer el nombre del agente de la función
+        // Extraer el nombre del agente de la función con mapeo específico para OpenAI
         let agentName = functionName;
         
         // Manejar específicamente la herramienta "think"
         if (functionName === "think") {
           agentName = "think";
         }
-        // Manejar herramientas de transferencia de OpenAI
+        // Manejar herramientas de transferencia de OpenAI con prefijo "a"
         else if (functionName.startsWith("atransfer_task_to_")) {
           agentName = functionName.replace("atransfer_task_to_", "");
         }
@@ -148,6 +148,36 @@ export function processToolCalls(
         }
         else if (functionName === "asearch_web") {
           agentName = "search_web";
+        }
+        // Manejar herramientas adicionales de OpenAI con prefijo "a"
+        else if (functionName === "aset_shared_context") {
+          agentName = "shared_context";
+        }
+        else if (functionName === "aget_chat_history") {
+          agentName = "chat_history";
+        }
+        // Mapear herramientas de Teams generales
+        else if (functionName === "transfer_task_to_member") {
+          // Para herramientas genéricas de transferencia, extraer el member_id
+          try {
+            let memberArgs: any = {};
+            if ('tool_args' in call && call.tool_args) {
+              memberArgs = call.tool_args;
+            } else if (call.function?.arguments) {
+              memberArgs = typeof call.function.arguments === 'string' 
+                ? JSON.parse(call.function.arguments)
+                : call.function.arguments;
+            }
+            
+            if (memberArgs.member_id) {
+              agentName = memberArgs.member_id;
+            } else {
+              agentName = "team_member";
+            }
+          } catch (memberError) {
+            console.warn("Error extracting member_id:", memberError);
+            agentName = "team_member";
+          }
         }
         
         // Guardar en pendingToolCalls para completar cuando llegue el resultado
@@ -259,10 +289,16 @@ export function processToolResults(
           let mappedToolName = result.tool_name as string;
           if (mappedToolName === "atransfer_task_to_member") {
             mappedToolName = "transfer_task";
+          } else if (mappedToolName.startsWith("atransfer_task_to_")) {
+            mappedToolName = mappedToolName.replace("atransfer_task_to_", "");
           } else if (mappedToolName === "asearch_knowledge_base") {
             mappedToolName = "search_knowledge";
           } else if (mappedToolName === "asearch_web") {
             mappedToolName = "search_web";
+          } else if (mappedToolName === "aset_shared_context") {
+            mappedToolName = "shared_context";
+          } else if (mappedToolName === "aget_chat_history") {
+            mappedToolName = "chat_history";
           }
           
           handleToolResult(
@@ -285,6 +321,13 @@ export function processToolResults(
         // Formato alternativo de OpenAI
         else if (result.id && result.content && result.type === "tool_result") {
           handleToolResult(result.id as string, result.content as string);
+          resultsProcessed = true;
+        }
+        // Manejo adicional para resultados de member responses
+        else if (result.member_id && result.content && result.event === "RunResponse") {
+          // Crear un ID único para este resultado de member
+          const memberId = `${result.member_id}_${result.created_at || Date.now()}`;
+          handleToolResult(memberId, result.content as string, result.member_id as string);
           resultsProcessed = true;
         }
       } catch (itemError) {
@@ -340,7 +383,7 @@ export function processHistoricalToolResult(
           const functionName = toolCall.function.name as string;
           agentName = functionName;
           
-          // Manejar nombres específicos de OpenAI
+          // Manejar nombres específicos de OpenAI con mapeo mejorado
           if (agentName.startsWith("atransfer_task_to_")) {
             agentName = agentName.replace("atransfer_task_to_", "");
           } else if (agentName.startsWith("transfer_task_to_")) {
@@ -349,6 +392,26 @@ export function processHistoricalToolResult(
             agentName = "search_knowledge";
           } else if (agentName === "asearch_web") {
             agentName = "search_web";
+          } else if (agentName === "aset_shared_context") {
+            agentName = "shared_context";
+          } else if (agentName === "aget_chat_history") {
+            agentName = "chat_history";
+          } else if (agentName === "transfer_task_to_member") {
+            // Para herramientas genéricas, extraer member_id
+            try {
+              const args = typeof toolCall.function.arguments === 'string'
+                ? JSON.parse(toolCall.function.arguments)
+                : toolCall.function.arguments;
+              
+              if (args.member_id) {
+                agentName = args.member_id;
+              } else {
+                agentName = "team_member";
+              }
+            } catch (memberError) {
+              console.warn("Error extracting member_id from historical message:", memberError);
+              agentName = "team_member";
+            }
           }
           
           // Extraer descripción de tarea
@@ -385,7 +448,7 @@ export function processHistoricalToolResult(
         else if ('tool_name' in toolCall) {
           agentName = toolCall.tool_name as string;
           
-          // Manejar nombres específicos de OpenAI
+          // Manejar nombres específicos de OpenAI con mapeo mejorado
           if (agentName.startsWith("atransfer_task_to_")) {
             agentName = agentName.replace("atransfer_task_to_", "");
           } else if (agentName.startsWith("transfer_task_to_")) {
@@ -394,6 +457,25 @@ export function processHistoricalToolResult(
             agentName = "search_knowledge";
           } else if (agentName === "asearch_web") {
             agentName = "search_web";
+          } else if (agentName === "aset_shared_context") {
+            agentName = "shared_context";
+          } else if (agentName === "aget_chat_history") {
+            agentName = "chat_history";
+          } else if (agentName === "transfer_task_to_member") {
+            // Para herramientas genéricas, extraer member_id
+            try {
+              if ('tool_args' in toolCall && toolCall.tool_args) {
+                const args = toolCall.tool_args;
+                if (args.member_id) {
+                  agentName = args.member_id as string;
+                } else {
+                  agentName = "team_member";
+                }
+              }
+            } catch (memberError) {
+              console.warn("Error extracting member_id from team tool:", memberError);
+              agentName = "team_member";
+            }
           }
           
           try {
@@ -469,14 +551,26 @@ export function processFormattedToolCalls(
 
         const [, toolName, argsStr] = match;
         
-        // Mapear nombres de herramientas de OpenAI
+        // Mapear nombres de herramientas de OpenAI con mapeo extendido
         let mappedToolName = toolName;
         if (toolName.startsWith("atransfer_task_to_")) {
-          mappedToolName = toolName.replace("atransfer_task_to_", "transfer_to_");
+          mappedToolName = toolName.replace("atransfer_task_to_", "");
         } else if (toolName === "asearch_knowledge_base") {
           mappedToolName = "search_knowledge";
         } else if (toolName === "asearch_web") {
           mappedToolName = "search_web";
+        } else if (toolName === "aset_shared_context") {
+          mappedToolName = "shared_context";
+        } else if (toolName === "aget_chat_history") {
+          mappedToolName = "chat_history";
+        } else if (toolName === "transfer_task_to_member") {
+          // Para herramientas genéricas, intentar extraer member_id de los argumentos
+          const memberMatch = argsStr.match(/member_id=([^,)]+)/);
+          if (memberMatch) {
+            mappedToolName = memberMatch[1].trim();
+          } else {
+            mappedToolName = "team_member";
+          }
         }
         
         // Crear una tarea básica desde el tool call formateado

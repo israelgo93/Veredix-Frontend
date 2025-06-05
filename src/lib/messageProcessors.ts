@@ -1,5 +1,5 @@
 // src/lib/messageProcessors.ts
-import type { ApiResponse, Message, ToolMessage, Source, ReasoningStep, MemberResponse } from "../hooks/types";
+import type { ApiResponse, Message, ToolMessage, Source, ReasoningStep, MemberResponse, TeamTool } from "../hooks/types";
 
 /**
  * Procesa un chunk de texto para extraer objetos JSON válidos
@@ -55,7 +55,7 @@ export function processJsonObjects(
             if (setCurrentModel && parsed.model && !currentModel) {
               if (parsed.model.includes("claude")) {
                 setCurrentModel("claude");
-              } else if (parsed.model.includes("o3-") || parsed.model.includes("gpt-") || parsed.model.includes("o1-")) {
+              } else if (parsed.model.includes("o3-") || parsed.model.includes("gpt-") || parsed.model.includes("o1-") || parsed.model.includes("o4-")) {
                 setCurrentModel("openai");
               }
             }
@@ -344,17 +344,29 @@ export function processFormattedToolCalls(
     formattedToolCalls.forEach((toolCallStr, index) => {
       try {
         // Parsear el string de tool call formateado
-        // Ejemplo: "think(title=Identificando la consulta del usuario, thought=El usuario me está preguntando...)"
+        // Ejemplos: 
+        // "think(title=Identificando la consulta del usuario, thought=El usuario me está preguntando...)"
+        // "atransfer_task_to_member(member_id=agente-legal, task_description=...)"
         const match = toolCallStr.match(/^(\w+)\((.*)\)$/);
         if (!match) return;
 
         const [, toolName, argsStr] = match;
         
+        // Mapear nombres de herramientas de OpenAI
+        let mappedToolName = toolName;
+        if (toolName.startsWith("atransfer_task_to_")) {
+          mappedToolName = toolName.replace("atransfer_task_to_", "transfer_to_");
+        } else if (toolName === "asearch_knowledge_base") {
+          mappedToolName = "search_knowledge";
+        } else if (toolName === "asearch_web") {
+          mappedToolName = "search_web";
+        }
+        
         // Crear una tarea básica desde el tool call formateado
         const taskId = `formatted_${Date.now()}_${index}`;
         const newTask = {
           id: taskId,
-          agent: toolName,
+          agent: mappedToolName,
           task: argsStr,
           result: "Ejecutando...",
           timestamp: new Date().toISOString()
@@ -377,7 +389,7 @@ export function processFormattedToolCalls(
 }
 
 /**
- * Procesa member responses desde las respuestas de la API de OpenAI
+ * Procesa member responses desde las respuestas de la API de OpenAI (Teams)
  */
 export function processMemberResponses(
   memberResponses: MemberResponse[] | undefined,
@@ -413,9 +425,20 @@ export function processMemberResponses(
             try {
               if (tool.result) {
                 const taskId = tool.tool_call_id;
+                let agentName = tool.tool_name;
+                
+                // Mapear nombres de herramientas específicas de OpenAI
+                if (agentName.startsWith("atransfer_task_to_")) {
+                  agentName = agentName.replace("atransfer_task_to_", "");
+                } else if (agentName === "asearch_knowledge_base") {
+                  agentName = "search_knowledge";
+                } else if (agentName === "asearch_web") {
+                  agentName = "search_web";
+                }
+                
                 const newTask = {
                   id: taskId,
-                  agent: tool.tool_name,
+                  agent: agentName,
                   task: JSON.stringify(tool.tool_args),
                   result: tool.result,
                   timestamp: new Date(tool.created_at).toISOString()
@@ -524,5 +547,78 @@ export function processReasoningContent(
     });
   } catch (error) {
     console.error("Error in processReasoningContent:", error);
+  }
+}
+
+/**
+ * Procesa tools desde respuestas de Teams para extraer fuentes
+ */
+export function processToolsForSources(
+  tools: TeamTool[] | undefined,
+  currentChatId: string | null,
+  processedToolIds?: Set<string>
+): Source[] {
+  try {
+    if (!tools || !Array.isArray(tools)) {
+      return [];
+    }
+
+    const newSources: Source[] = [];
+    
+    tools.forEach(tool => {
+      try {
+        // Solo procesar herramientas con resultados
+        if (!tool.result || !tool.tool_call_id) return;
+        
+        // Evitar procesar el mismo tool_call_id más de una vez
+        if (processedToolIds && processedToolIds.has(tool.tool_call_id)) {
+          return;
+        }
+        
+        // Verificar si es una herramienta de búsqueda que podría contener fuentes
+        if (tool.tool_name && (
+          tool.tool_name.includes("search") || 
+          tool.tool_name.includes("knowledge") ||
+          tool.tool_name.includes("busca")
+        )) {
+          try {
+            // Intentar parsear el resultado como JSON para extraer fuentes
+            const parsedResult = JSON.parse(tool.result);
+            
+            if (Array.isArray(parsedResult)) {
+              // Si es un array de fuentes
+              parsedResult.forEach(source => {
+                if (source && source.meta_data && source.name && source.content) {
+                  newSources.push({
+                    meta_data: {
+                      page: source.meta_data.page || 0,
+                      chunk: source.meta_data.chunk || 0,
+                      chunk_size: source.meta_data.chunk_size || 0
+                    },
+                    name: source.name,
+                    content: source.content
+                  });
+                }
+              });
+            }
+          } catch (parseError) {
+            // Si no se puede parsear como JSON, ignorar silenciosamente
+            console.log("Tool result is not JSON sources:", tool.tool_name);
+          }
+        }
+        
+        // Marcar como procesado
+        if (processedToolIds) {
+          processedToolIds.add(tool.tool_call_id);
+        }
+      } catch (toolError) {
+        console.warn("Error processing tool for sources:", toolError);
+      }
+    });
+    
+    return newSources;
+  } catch (error) {
+    console.error("Error in processToolsForSources:", error);
+    return [];
   }
 }
