@@ -15,7 +15,11 @@ import {
 import { 
   processJsonObjects, 
   updateAssistantMessage, 
-  processSourcesFromToolMessage 
+  processSourcesFromToolMessage,
+  processSourcesFromReferences,
+  processMemberResponses,
+  processReasoningContent,
+  processFormattedToolCalls
 } from "../lib/messageProcessors"
 import { 
   processToolCalls, 
@@ -59,6 +63,8 @@ export function useChat(): UseChatReturn {
   const currentContentRef = useRef<string>("")
   const bufferRef = useRef<string>("")
   const processedToolIds = useRef<Set<string>>(new Set())
+  const processedMemberIds = useRef<Set<string>>(new Set())
+  const processedReferenceIds = useRef<Set<string>>(new Set())
   const pendingToolCalls = useRef<Map<string, {agent: string, task: string}>>(new Map())
   const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null)
   const retryCountRef = useRef<number>(0)
@@ -189,6 +195,8 @@ export function useChat(): UseChatReturn {
     setProcessingState("idle")
     localStorage.removeItem("currentChatId")
     processedToolIds.current.clear()
+    processedMemberIds.current.clear()
+    processedReferenceIds.current.clear()
     pendingToolCalls.current.clear()
     retryCountRef.current = 0
     lastValidChunkRef.current = ""
@@ -211,12 +219,14 @@ export function useChat(): UseChatReturn {
       
       const rawMessages = (sessionData.memory?.messages || []) as Array<Message | ToolMessage>
 
-      // Reiniciamos las fuentes, tareas, reasoning steps y el conjunto de tool_call_id
+      // Reiniciamos las fuentes, tareas, reasoning steps y los conjuntos de procesados
       setSources([])
       setAgentTasks([])
       setReasoningSteps([])
       setIsGeneratingTask(false)
       processedToolIds.current.clear()
+      processedMemberIds.current.clear()
+      processedReferenceIds.current.clear()
       pendingToolCalls.current.clear()
       retryCountRef.current = 0
       lastValidChunkRef.current = ""
@@ -482,7 +492,7 @@ export function useChat(): UseChatReturn {
 
             for (const parsedData of jsonObjects) {
               try {
-                // Procesar eventos específicos de Teams
+                // Procesar eventos específicos de Teams (Claude y OpenAI)
                 switch (parsedData.event) {
                   case "RunStarted":
                     setProcessingState("thinking");
@@ -676,6 +686,44 @@ export function useChat(): UseChatReturn {
                     ));
                     setProcessingState("idle");
                     break;
+                }
+                
+                // Procesar member_responses específicos de OpenAI
+                if (parsedData.member_responses && Array.isArray(parsedData.member_responses)) {
+                  processMemberResponses(
+                    parsedData.member_responses,
+                    setAgentTasks,
+                    setSources,
+                    currentChatId,
+                    processedMemberIds.current
+                  );
+                  updateActivity();
+                }
+                
+                // Procesar formatted_tool_calls específicos de OpenAI
+                if (parsedData.formatted_tool_calls && Array.isArray(parsedData.formatted_tool_calls)) {
+                  processFormattedToolCalls(parsedData.formatted_tool_calls, setAgentTasks);
+                  updateActivity();
+                }
+                
+                // Procesar reasoning_content específico de OpenAI
+                if (parsedData.reasoning_content && typeof parsedData.reasoning_content === 'string') {
+                  processReasoningContent(parsedData.reasoning_content, setReasoningSteps);
+                  updateActivity();
+                }
+                
+                // Procesar referencias en extra_data (especialmente OpenAI)
+                if (parsedData.extra_data?.references && Array.isArray(parsedData.extra_data.references)) {
+                  const newSources = processSourcesFromReferences(
+                    parsedData.extra_data.references,
+                    currentChatId,
+                    processedReferenceIds.current
+                  );
+                  
+                  if (newSources.length > 0) {
+                    setSources(prev => [...prev, ...newSources]);
+                  }
+                  updateActivity();
                 }
                 
                 // 3. Procesar tool_calls en mensajes del asistente

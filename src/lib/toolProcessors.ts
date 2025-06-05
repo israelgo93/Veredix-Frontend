@@ -2,7 +2,7 @@
 import type { ToolCall, AgentTask, ProcessingState, Message, ToolMessage, TeamTool } from "../hooks/types";
 
 /**
- * Procesa las llamadas a herramientas (compatibilidad agents y teams)
+ * Procesa las llamadas a herramientas (compatibilidad agents y teams, Claude y OpenAI)
  */
 export function processToolCalls(
   toolCalls: Array<ToolCall | TeamTool> | undefined,
@@ -37,6 +37,12 @@ export function processToolCalls(
               // Manejo especial para herramienta "think"
               if (functionName === "think" && call.tool_args.thought) {
                 taskDescription = JSON.stringify(call.tool_args);
+              } else if (functionName === "think" && call.tool_args.title) {
+                // Formato alternativo de OpenAI para think
+                taskDescription = JSON.stringify({
+                  title: call.tool_args.title,
+                  thought: call.tool_args.thought || "Procesando..."
+                });
               } else {
                 taskDescription = typeof call.tool_args.task_description === 'string'
                   ? call.tool_args.task_description 
@@ -82,6 +88,12 @@ export function processToolCalls(
               // Manejo especial para herramienta "think"
               if (functionName === "think" && args.thought) {
                 taskDescription = JSON.stringify(args);
+              } else if (functionName === "think" && args.title) {
+                // Formato alternativo para think
+                taskDescription = JSON.stringify({
+                  title: args.title,
+                  thought: args.thought || "Procesando..."
+                });
               } else {
                 taskDescription = typeof args.task_description === 'string' 
                   ? args.task_description 
@@ -93,6 +105,12 @@ export function processToolCalls(
               // Manejo especial para herramienta "think"
               if (functionName === "think" && call.tool_args.thought) {
                 taskDescription = JSON.stringify(call.tool_args);
+              } else if (functionName === "think" && call.tool_args.title) {
+                // Formato alternativo de OpenAI para think
+                taskDescription = JSON.stringify({
+                  title: call.tool_args.title,
+                  thought: call.tool_args.thought || "Procesando..."
+                });
               } else {
                 taskDescription = typeof call.tool_args.task_description === 'string'
                   ? call.tool_args.task_description 
@@ -116,9 +134,20 @@ export function processToolCalls(
         if (functionName === "think") {
           agentName = "think";
         }
+        // Manejar herramientas de transferencia de OpenAI
+        else if (functionName.startsWith("atransfer_task_to_")) {
+          agentName = functionName.replace("atransfer_task_to_", "");
+        }
         // Extraer el nombre del agente si está en formato "transfer_task_to_X"
         else if (functionName.startsWith("transfer_task_to_")) {
           agentName = functionName.replace("transfer_task_to_", "");
+        }
+        // Manejar herramientas de búsqueda específicas de OpenAI
+        else if (functionName === "asearch_knowledge_base") {
+          agentName = "search_knowledge";
+        }
+        else if (functionName === "asearch_web") {
+          agentName = "search_web";
         }
         
         // Guardar en pendingToolCalls para completar cuando llegue el resultado
@@ -143,7 +172,7 @@ export function processToolCalls(
 }
 
 /**
- * Procesa los resultados de herramientas (compatibilidad agents y teams)
+ * Procesa los resultados de herramientas (compatibilidad agents y teams, Claude y OpenAI)
  */
 export function processToolResults(
   toolResults: Array<Record<string, unknown> | TeamTool> | undefined,
@@ -216,9 +245,31 @@ export function processToolResults(
           handleToolResult(teamTool.tool_call_id, teamTool.result as string, teamTool.tool_name);
           resultsProcessed = true;
         }
-        // Para herramienta "think" - buscar patrón específico
+        // Para herramienta "think" - buscar patrón específico (OpenAI format)
         else if (result.tool_name === "think" && result.tool_call_id && typeof result.content === 'string') {
           handleToolResult(result.tool_call_id as string, result.content, "think");
+          resultsProcessed = true;
+        }
+        // Manejo específico para herramientas de OpenAI con prefijo 'a'
+        else if (typeof result.tool_name === 'string' && 
+                 result.tool_name.startsWith('a') && 
+                 result.tool_call_id && 
+                 result.content) {
+          // Mapear nombres de herramientas de OpenAI a nombres internos
+          let mappedToolName = result.tool_name as string;
+          if (mappedToolName === "atransfer_task_to_member") {
+            mappedToolName = "transfer_task";
+          } else if (mappedToolName === "asearch_knowledge_base") {
+            mappedToolName = "search_knowledge";
+          } else if (mappedToolName === "asearch_web") {
+            mappedToolName = "search_web";
+          }
+          
+          handleToolResult(
+            result.tool_call_id as string, 
+            result.content as string, 
+            mappedToolName
+          );
           resultsProcessed = true;
         }
         // Estructura de Claude - resultados como parte del content en mensajes
@@ -229,6 +280,11 @@ export function processToolResults(
         // Estructura de OpenAI - resultados directos en la herramienta
         else if (result.tool_call_id && result.content && !result.tool_call_error) {
           handleToolResult(result.tool_call_id as string, result.content as string);
+          resultsProcessed = true;
+        }
+        // Formato alternativo de OpenAI
+        else if (result.id && result.content && result.type === "tool_result") {
+          handleToolResult(result.id as string, result.content as string);
           resultsProcessed = true;
         }
       } catch (itemError) {
@@ -255,7 +311,7 @@ export function processToolResults(
 }
 
 /**
- * Procesa los tool_calls para un mensaje al cargar una sesión
+ * Procesa los tool_calls para un mensaje al cargar una sesión (compatibilidad mejorada)
  */
 export function processHistoricalToolResult(
   toolId: string,
@@ -284,8 +340,15 @@ export function processHistoricalToolResult(
           const functionName = toolCall.function.name as string;
           agentName = functionName;
           
-          if (agentName.startsWith("transfer_task_to_")) {
+          // Manejar nombres específicos de OpenAI
+          if (agentName.startsWith("atransfer_task_to_")) {
+            agentName = agentName.replace("atransfer_task_to_", "");
+          } else if (agentName.startsWith("transfer_task_to_")) {
             agentName = agentName.replace("transfer_task_to_", "");
+          } else if (agentName === "asearch_knowledge_base") {
+            agentName = "search_knowledge";
+          } else if (agentName === "asearch_web") {
+            agentName = "search_web";
           }
           
           // Extraer descripción de tarea
@@ -295,9 +358,21 @@ export function processHistoricalToolResult(
                 ? JSON.parse(toolCall.function.arguments)
                 : toolCall.function.arguments;
                 
-              taskDescription = typeof args.task_description === 'string'
-                ? args.task_description
-                : JSON.stringify(args);
+              // Manejo especial para think
+              if (functionName === "think") {
+                if (args.thought) {
+                  taskDescription = JSON.stringify(args);
+                } else if (args.title) {
+                  taskDescription = JSON.stringify({
+                    title: args.title,
+                    thought: args.thought || "Proceso de razonamiento"
+                  });
+                }
+              } else {
+                taskDescription = typeof args.task_description === 'string'
+                  ? args.task_description
+                  : JSON.stringify(args);
+              }
             }
           } catch (parseError) {
             console.warn("Error parsing tool arguments:", parseError);
@@ -310,16 +385,36 @@ export function processHistoricalToolResult(
         else if ('tool_name' in toolCall) {
           agentName = toolCall.tool_name as string;
           
-          if (agentName.startsWith("transfer_task_to_")) {
+          // Manejar nombres específicos de OpenAI
+          if (agentName.startsWith("atransfer_task_to_")) {
+            agentName = agentName.replace("atransfer_task_to_", "");
+          } else if (agentName.startsWith("transfer_task_to_")) {
             agentName = agentName.replace("transfer_task_to_", "");
+          } else if (agentName === "asearch_knowledge_base") {
+            agentName = "search_knowledge";
+          } else if (agentName === "asearch_web") {
+            agentName = "search_web";
           }
           
           try {
             if ('tool_args' in toolCall && toolCall.tool_args) {
               const args = toolCall.tool_args;
-              taskDescription = typeof args.task_description === 'string'
-                ? args.task_description
-                : JSON.stringify(args);
+              
+              // Manejo especial para think
+              if (toolCall.tool_name === "think") {
+                if (args.thought) {
+                  taskDescription = JSON.stringify(args);
+                } else if (args.title) {
+                  taskDescription = JSON.stringify({
+                    title: args.title,
+                    thought: args.thought || "Proceso de razonamiento"
+                  });
+                }
+              } else {
+                taskDescription = typeof args.task_description === 'string'
+                  ? args.task_description
+                  : JSON.stringify(args);
+              }
             }
           } catch (parseError) {
             console.warn("Error parsing team tool arguments:", parseError);
@@ -352,7 +447,7 @@ export function processHistoricalToolResult(
 }
 
 /**
- * Procesa formatted tool calls específicos de teams
+ * Procesa formatted tool calls específicos de OpenAI teams
  */
 export function processFormattedToolCalls(
   formattedToolCalls: string[] | undefined,
@@ -366,17 +461,29 @@ export function processFormattedToolCalls(
     formattedToolCalls.forEach((toolCallStr, index) => {
       try {
         // Parsear el string de tool call formateado
-        // Ejemplo: "think(title=Identificando la consulta del usuario, thought=El usuario me está preguntando...)"
+        // Ejemplos: 
+        // "think(title=Identificando la consulta del usuario, thought=El usuario me está preguntando...)"
+        // "atransfer_task_to_member(member_id=agente-legal, task_description=...)"
         const match = toolCallStr.match(/^(\w+)\((.*)\)$/);
         if (!match) return;
 
         const [, toolName, argsStr] = match;
         
+        // Mapear nombres de herramientas de OpenAI
+        let mappedToolName = toolName;
+        if (toolName.startsWith("atransfer_task_to_")) {
+          mappedToolName = toolName.replace("atransfer_task_to_", "transfer_to_");
+        } else if (toolName === "asearch_knowledge_base") {
+          mappedToolName = "search_knowledge";
+        } else if (toolName === "asearch_web") {
+          mappedToolName = "search_web";
+        }
+        
         // Crear una tarea básica desde el tool call formateado
         const taskId = `formatted_${Date.now()}_${index}`;
-        const newTask: AgentTask = {
+        const newTask = {
           id: taskId,
-          agent: toolName,
+          agent: mappedToolName,
           task: argsStr,
           result: "Ejecutando...",
           timestamp: new Date().toISOString()

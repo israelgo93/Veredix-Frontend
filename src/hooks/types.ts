@@ -45,6 +45,19 @@ export interface ExtraData {
   session_id?: string
   reasoning_steps?: ReasoningStep[]
   reasoning_messages?: Array<Record<string, unknown>>
+  references?: Array<{
+    query: string
+    references: Array<{
+      meta_data: {
+        page: number
+        chunk: number
+        chunk_size: number
+      }
+      content: string
+      name: string
+    }>
+    time: number
+  }>
 }
 
 // Nuevos tipos para Teams API
@@ -57,10 +70,61 @@ export interface ReasoningStep {
   confidence: number
 }
 
+// Nuevo tipo específico para respuestas de miembros de OpenAI
 export interface MemberResponse {
-  member_id: string
-  response: string
-  status: string
+  member_id?: string
+  content: string
+  content_type: string
+  event: string
+  metrics?: {
+    input_tokens?: number | number[]
+    output_tokens?: number | number[]
+    total_tokens?: number | number[]
+    audio_tokens?: number | number[]
+    input_audio_tokens?: number | number[]
+    output_audio_tokens?: number | number[]
+    cached_tokens?: number | number[]
+    cache_write_tokens?: number | number[]
+    reasoning_tokens?: number | number[]
+    prompt_tokens?: number | number[]
+    completion_tokens?: number | number[]
+    prompt_tokens_details?: Array<{
+      audio_tokens?: number
+      cached_tokens?: number
+    }>
+    completion_tokens_details?: Array<{
+      accepted_prediction_tokens?: number
+      audio_tokens?: number
+      reasoning_tokens?: number
+      rejected_prediction_tokens?: number
+    }>
+    time?: number | number[]
+    time_to_first_token?: number | number[]
+  }
+  model?: string
+  model_provider?: string
+  run_id?: string
+  agent_id?: string
+  session_id?: string
+  formatted_tool_calls?: string[]
+  created_at?: number
+  messages?: Array<Message | ToolMessage>
+  extra_data?: {
+    references?: Array<{
+      query: string
+      references: Array<{
+        meta_data: {
+          page: number
+          chunk: number
+          chunk_size: number
+        }
+        content: string
+        name: string
+      }>
+      time: number
+    }>
+  }
+  tools?: Array<TeamTool>
   [key: string]: unknown
 }
 
@@ -91,15 +155,15 @@ export interface ApiResponse {
   agent_id?: string  // Mantener para compatibilidad
   session_id?: string
   created_at?: number
-  messages: Array<Message | ToolMessage>
+  messages?: Array<Message | ToolMessage>
   sources?: Source[]
   extra_data?: ExtraData
   status?: "thinking" | "reasoning" | "completing"
   tool_calls?: Array<ToolCall>
   tools?: Array<TeamTool>
   member_responses?: MemberResponse[]  // Nuevo campo para teams
-  formatted_tool_calls?: string[]  // Nuevo campo para teams
-  reasoning_content?: string  // Nuevo campo para reasoning
+  formatted_tool_calls?: string[]  // Nuevo campo para teams (OpenAI)
+  reasoning_content?: string  // Nuevo campo para reasoning (OpenAI)
   citations?: {
     raw: Array<unknown>
     urls: Array<string>
@@ -142,6 +206,7 @@ export interface ToolCall {
   tool_args?: Record<string, unknown>
   content?: string
   tool_call_error?: boolean
+  type?: string  // Agregar tipo para Claude compatibility
 }
 
 export interface UseChatReturn {

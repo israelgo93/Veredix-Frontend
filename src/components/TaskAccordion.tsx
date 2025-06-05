@@ -25,7 +25,7 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   const [expanded, setExpanded] = useState(false)
   
   // Intenta detectar si el resultado es JSON, y si es así, lo parsea
-  const tryParseJSON = (jsonString: string): Record<string, unknown> | null => {
+  const tryParseJSON = (jsonString: string): Record<string, unknown> | ParsedSource[] | null => {
     try {
       return JSON.parse(jsonString)
     } catch {
@@ -34,9 +34,9 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   }
   
   // Función para renderizar una fuente de conocimiento
-  const renderKnowledgeSource = (source: ParsedSource) => {
+  const renderKnowledgeSource = (source: ParsedSource, index: number) => {
     return (
-      <Card key={source.name + (source.meta_data?.page ?? '')} className="p-3 mb-2 text-xs">
+      <Card key={`${source.name}_${index}_${source.meta_data?.page ?? ''}`} className="p-3 mb-2 text-xs">
         <div className="flex items-center justify-between mb-2">
           <div>
             <span className="font-bold">{source.name}</span>
@@ -45,10 +45,17 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
                 Página {source.meta_data.page}
               </span>
             )}
+            {source.meta_data?.chunk && (
+              <span className="ml-1 text-muted-foreground">
+                (Fragmento {source.meta_data.chunk})
+              </span>
+            )}
           </div>
         </div>
         <div className="mt-1 text-muted-foreground">
-          <p className="whitespace-pre-line">{source.content}</p>
+          <p className="whitespace-pre-line leading-relaxed">
+            {source.content.length > 500 ? `${source.content.substring(0, 500)}...` : source.content}
+          </p>
         </div>
       </Card>
     )
@@ -60,8 +67,13 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     if (task.agent === "think") {
       try {
         const parsed = tryParseJSON(taskText);
-        if (parsed && typeof parsed.thought === 'string') {
-          return parsed.thought;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          if (typeof parsed.thought === 'string') {
+            return parsed.thought;
+          }
+          if (typeof parsed.title === 'string') {
+            return parsed.title;
+          }
         }
       } catch {}
     }
@@ -86,17 +98,81 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
         task.agent.includes("busqueda_profunda") || 
         task.task.includes("search_knowledge") || 
         task.task.includes("busqueda_profunda") ||
-        task.task.includes("buscar")) {
+        task.task.includes("buscar") ||
+        task.task.includes("asearch_knowledge_base")) {
       
       const parsedResult = tryParseJSON(task.result)
       
+      // Si es un array de fuentes (formato esperado)
       if (Array.isArray(parsedResult)) {
         return (
           <div className="space-y-3">
             <p className="font-medium text-xs">Se encontraron {parsedResult.length} fuentes relevantes:</p>
-            {parsedResult.map((source) => renderKnowledgeSource(source as ParsedSource))}
+            {parsedResult.map((source, index) => renderKnowledgeSource(source as ParsedSource, index))}
           </div>
         )
+      }
+      
+      // Si es un objeto con información de sitio web (formato alternativo)
+      if (parsedResult && typeof parsedResult === 'object' && !Array.isArray(parsedResult)) {
+        // Verificar si tiene estructura de respuesta de búsqueda web
+        if (parsedResult.site && typeof parsedResult.site === 'string') {
+          return (
+            <div className="space-y-3">
+              <div className="text-xs">
+                <p className="font-medium mb-2">Resultado de búsqueda web:</p>
+                <Card className="p-3">
+                  <div className="mb-2">
+                    <span className="font-bold text-xs">Sitio:</span>
+                    <span className="ml-2 text-xs text-muted-foreground">{parsedResult.site}</span>
+                  </div>
+                  {parsedResult.Summary && (
+                    <div className="mb-2">
+                      <span className="font-bold text-xs">Resumen:</span>
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                        {typeof parsedResult.Summary === 'string' ? parsedResult.Summary : JSON.stringify(parsedResult.Summary)}
+                      </p>
+                    </div>
+                  )}
+                  {parsedResult.content && (
+                    <div>
+                      <span className="font-bold text-xs">Contenido:</span>
+                      <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                        {typeof parsedResult.content === 'string' 
+                          ? (parsedResult.content.length > 800 ? `${parsedResult.content.substring(0, 800)}...` : parsedResult.content)
+                          : JSON.stringify(parsedResult.content)
+                        }
+                      </p>
+                    </div>
+                  )}
+                </Card>
+              </div>
+            </div>
+          )
+        }
+        
+        // Para otros tipos de objetos, intentar mostrar las propiedades más relevantes
+        const keys = Object.keys(parsedResult);
+        if (keys.length > 0) {
+          return (
+            <div className="space-y-2">
+              <p className="font-medium text-xs">Resultado de búsqueda:</p>
+              <Card className="p-3">
+                {keys.slice(0, 5).map((key) => (
+                  <div key={key} className="mb-2 last:mb-0">
+                    <span className="font-bold text-xs">{key}:</span>
+                    <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                      {typeof parsedResult[key] === 'string' 
+                        ? (parsedResult[key].length > 300 ? `${parsedResult[key].substring(0, 300)}...` : parsedResult[key])
+                        : JSON.stringify(parsedResult[key])
+                      }
+                    </p>
+                  </div>
+                ))}
+              </Card>
+            </div>
+          )
+        }
       }
     }
     
@@ -116,11 +192,16 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     if (task.agent === "think") {
       try {
         const parsed = tryParseJSON(task.task);
-        if (parsed && typeof parsed.thought === 'string') {
-          const thought = parsed.thought;
-          return thought.length > 100
-            ? thought.slice(0, 100).trim() + "..."
-            : thought;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          if (typeof parsed.thought === 'string') {
+            const thought = parsed.thought;
+            return thought.length > 100
+              ? thought.slice(0, 100).trim() + "..."
+              : thought;
+          }
+          if (typeof parsed.title === 'string') {
+            return parsed.title;
+          }
         }
       } catch {}
     }
@@ -131,11 +212,18 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
         task.agent.includes("busqueda_profunda") || 
         task.task.includes("search_knowledge") || 
         task.task.includes("busqueda_profunda") ||
-        task.task.includes("buscar")) {
+        task.task.includes("buscar") ||
+        task.task.includes("asearch_knowledge_base")) {
       
       const parsedResult = tryParseJSON(task.result)
       if (Array.isArray(parsedResult)) {
         return `Se encontraron ${parsedResult.length} fuentes en la base de conocimiento.`
+      }
+      if (parsedResult && typeof parsedResult === 'object') {
+        if (parsedResult.site) {
+          return `Búsqueda web en: ${parsedResult.site}`
+        }
+        return "Resultado de búsqueda procesado."
       }
     }
     
@@ -152,11 +240,11 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
   // Obtiene un título representativo para la tarea basado en el agente y contenido
   const getTaskTitle = () => {
     if (task.agent === "think") {
-      return "Tarea del agente: think";
+      return "Proceso de Razonamiento";
     }
     
-    if (task.agent.includes("search_knowledge")) {
-      return "Búsqueda en base de conocimiento";
+    if (task.agent.includes("search_knowledge") || task.task.includes("asearch_knowledge_base")) {
+      return "Búsqueda en Base de Conocimiento";
     }
 
     if (task.agent.includes("agente_buscador") || task.agent.includes("buscador")) {
@@ -168,13 +256,13 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     }
     
     if (task.agent.includes("agente_legal") || task.agent.includes("legal")) {
-      return "Consulta legal";
+      return "Consulta Legal";
     }
     
     // Si hay texto "transfer_task_to_" en el agente, formatearlo mejor
-    if (task.agent.includes("transfer_task_to_")) {
-      const agentName = task.agent.replace("transfer_task_to_", "");
-      return `Tarea del agente: ${agentName}`;
+    if (task.agent.includes("transfer_task_to_") || task.agent.includes("atransfer_task_to_")) {
+      const agentName = task.agent.replace("transfer_task_to_", "").replace("atransfer_task_to_", "");
+      return `Transferencia a: ${agentName}`;
     }
     
     return `Tarea del agente: ${task.agent}`;
@@ -188,23 +276,27 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
     }
     
     // Si la tarea incluye parámetros en formato JSON, intenta extraer la consulta
-    if (task.task.includes("{\"query\":")) {
+    if (task.task.includes("{\"query\":") || task.task.includes("\"query\":")) {
       const parsed = tryParseJSON(task.task);
-      if (parsed && typeof parsed.query === 'string') {
-        return parsed.query;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        if (typeof parsed.query === 'string') {
+          return parsed.query;
+        }
       }
     }
 
     // Para OpenAI, la consulta puede estar en task_description
     if (task.task.includes("task_description")) {
       const parsed = tryParseJSON(task.task);
-      if (parsed && typeof parsed.task_description === 'string') {
-        return parsed.task_description;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        if (typeof parsed.task_description === 'string') {
+          return parsed.task_description;
+        }
       }
     }
     
-    // Si no pudimos extraer, devolvemos la tarea original
-    return task.task;
+    // Si no pudimos extraer, devolvemos la tarea original (pero limitada)
+    return task.task.length > 200 ? `${task.task.substring(0, 200)}...` : task.task;
   }
 
   return (
@@ -229,9 +321,9 @@ const TaskAccordion = ({ task }: TaskAccordionProps) => {
       </div>
       <div className="mt-2 text-xs">
         <p className="font-medium mb-1">Consulta:</p>
-        <p className="text-muted-foreground mb-2">{getTaskQuery()}</p>
+        <p className="text-muted-foreground mb-2 leading-relaxed">{getTaskQuery()}</p>
         <p className="font-medium mb-1">Resultado:</p>
-        {expanded ? renderTaskResult() : <p className="text-muted-foreground">{getSummary()}</p>}
+        {expanded ? renderTaskResult() : <p className="text-muted-foreground leading-relaxed">{getSummary()}</p>}
       </div>
     </div>
   )

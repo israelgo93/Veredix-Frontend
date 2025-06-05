@@ -1,5 +1,5 @@
 // src/lib/messageProcessors.ts
-import type { ApiResponse, Message, ToolMessage, Source, ReasoningStep } from "../hooks/types";
+import type { ApiResponse, Message, ToolMessage, Source, ReasoningStep, MemberResponse } from "../hooks/types";
 
 /**
  * Procesa un chunk de texto para extraer objetos JSON válidos
@@ -55,7 +55,7 @@ export function processJsonObjects(
             if (setCurrentModel && parsed.model && !currentModel) {
               if (parsed.model.includes("claude")) {
                 setCurrentModel("claude");
-              } else if (parsed.model.includes("o3-") || parsed.model.includes("gpt-")) {
+              } else if (parsed.model.includes("o3-") || parsed.model.includes("gpt-") || parsed.model.includes("o1-")) {
                 setCurrentModel("openai");
               }
             }
@@ -213,6 +213,80 @@ export function processSourcesFromToolMessage(
 }
 
 /**
+ * Procesa fuentes desde referencias en extra_data (especialmente para OpenAI)
+ */
+export function processSourcesFromReferences(
+  references: Array<{
+    query: string
+    references: Array<{
+      meta_data: {
+        page: number
+        chunk: number
+        chunk_size: number
+      }
+      content: string
+      name: string
+    }>
+    time: number
+  }> | undefined,
+  currentChatId: string | null,
+  processedReferenceIds?: Set<string>
+): Source[] {
+  try {
+    if (!references || !Array.isArray(references)) {
+      return [];
+    }
+
+    const newSources: Source[] = [];
+    
+    references.forEach((ref, refIndex) => {
+      try {
+        if (ref.references && Array.isArray(ref.references)) {
+          ref.references.forEach((source, sourceIndex) => {
+            try {
+              // Crear un ID único para esta referencia
+              const referenceId = `${refIndex}_${sourceIndex}_${ref.time}`;
+              
+              // Evitar procesar la misma referencia más de una vez
+              if (processedReferenceIds && processedReferenceIds.has(referenceId)) {
+                return;
+              }
+              
+              // Convertir la referencia al formato Source esperado
+              const newSource: Source = {
+                meta_data: {
+                  page: source.meta_data.page,
+                  chunk: source.meta_data.chunk,
+                  chunk_size: source.meta_data.chunk_size
+                },
+                name: source.name,
+                content: source.content
+              };
+              
+              newSources.push(newSource);
+              
+              // Marcar como procesada
+              if (processedReferenceIds) {
+                processedReferenceIds.add(referenceId);
+              }
+            } catch (sourceError) {
+              console.warn("Error processing individual reference source:", sourceError);
+            }
+          });
+        }
+      } catch (refError) {
+        console.warn("Error processing reference:", refError);
+      }
+    });
+    
+    return newSources;
+  } catch (error) {
+    console.error("Error in processSourcesFromReferences:", error);
+    return [];
+  }
+}
+
+/**
  * Procesa reasoning steps desde las respuestas de la API
  */
 export function processReasoningSteps(
@@ -256,7 +330,7 @@ export function processReasoningSteps(
 }
 
 /**
- * Procesa formatted tool calls desde las respuestas de la API de teams
+ * Procesa formatted tool calls desde las respuestas de la API de OpenAI
  */
 export function processFormattedToolCalls(
   formattedToolCalls: string[] | undefined,
@@ -303,11 +377,14 @@ export function processFormattedToolCalls(
 }
 
 /**
- * Procesa member responses desde las respuestas de la API de teams
+ * Procesa member responses desde las respuestas de la API de OpenAI
  */
 export function processMemberResponses(
-  memberResponses: any[] | undefined,
-  setAgentTasks: (updater: (prev: any[]) => any[]) => void
+  memberResponses: MemberResponse[] | undefined,
+  setAgentTasks: (updater: (prev: any[]) => any[]) => void,
+  setSources: (updater: (prev: Source[]) => Source[]) => void,
+  currentChatId: string | null,
+  processedMemberIds?: Set<string>
 ): void {
   try {
     if (!memberResponses || !Array.isArray(memberResponses)) {
@@ -316,22 +393,65 @@ export function processMemberResponses(
 
     memberResponses.forEach((response, index) => {
       try {
-        const taskId = `member_${response.member_id || index}_${Date.now()}`;
-        const newTask = {
-          id: taskId,
-          agent: response.member_id || `member_${index}`,
-          task: response.request || "Tarea de miembro del equipo",
-          result: response.response || response.content || "Respuesta procesada",
-          timestamp: new Date().toISOString()
-        };
+        // Crear un ID único para esta respuesta de miembro
+        const memberId = response.member_id || `member_${index}`;
+        const responseId = `${memberId}_${response.created_at || Date.now()}`;
+        
+        // Evitar procesar la misma respuesta más de una vez
+        if (processedMemberIds && processedMemberIds.has(responseId)) {
+          return;
+        }
 
-        setAgentTasks(prev => {
-          const exists = prev.some(task => task.id === newTask.id);
-          if (!exists) {
-            return [...prev, newTask];
+        // Procesar formatted_tool_calls si están presentes
+        if (response.formatted_tool_calls && Array.isArray(response.formatted_tool_calls)) {
+          processFormattedToolCalls(response.formatted_tool_calls, setAgentTasks);
+        }
+
+        // Procesar tools si están presentes
+        if (response.tools && Array.isArray(response.tools)) {
+          response.tools.forEach(tool => {
+            try {
+              if (tool.result) {
+                const taskId = tool.tool_call_id;
+                const newTask = {
+                  id: taskId,
+                  agent: tool.tool_name,
+                  task: JSON.stringify(tool.tool_args),
+                  result: tool.result,
+                  timestamp: new Date(tool.created_at).toISOString()
+                };
+
+                setAgentTasks(prev => {
+                  const exists = prev.some(task => task.id === newTask.id);
+                  if (!exists) {
+                    return [...prev, newTask];
+                  }
+                  return prev;
+                });
+              }
+            } catch (toolError) {
+              console.warn("Error processing member tool:", toolError);
+            }
+          });
+        }
+
+        // Procesar referencias si están presentes en extra_data
+        if (response.extra_data?.references) {
+          const newSources = processSourcesFromReferences(
+            response.extra_data.references,
+            currentChatId,
+            processedMemberIds
+          );
+          
+          if (newSources.length > 0) {
+            setSources(prev => [...prev, ...newSources]);
           }
-          return prev;
-        });
+        }
+
+        // Marcar como procesado
+        if (processedMemberIds) {
+          processedMemberIds.add(responseId);
+        }
       } catch (memberError) {
         console.warn("Error processing member response:", memberError);
       }
@@ -342,7 +462,7 @@ export function processMemberResponses(
 }
 
 /**
- * Procesa reasoning content desde las respuestas de la API
+ * Procesa reasoning content desde las respuestas de la API de OpenAI
  */
 export function processReasoningContent(
   reasoningContent: string | undefined,
