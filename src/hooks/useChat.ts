@@ -27,6 +27,7 @@ import type {
   ToolMessage,
   Source,
   AgentTask,
+  ReasoningStep,
   ProcessingState,
   ToolResultItem,
   UseChatReturn,
@@ -35,7 +36,7 @@ import type {
 } from "./types"
 
 // Re-export types that are used by components importing this hook
-export type { Source, AgentTask, Message, ProcessingState, UserSession }
+export type { Source, AgentTask, Message, ProcessingState, UserSession, ReasoningStep }
 
 export function useChat(): UseChatReturn {
   const [messages, setMessages] = useState<Message[]>([])
@@ -43,6 +44,7 @@ export function useChat(): UseChatReturn {
   const [canStopResponse, setCanStopResponse] = useState(false)
   const [sources, setSources] = useState<Source[]>([])
   const [agentTasks, setAgentTasks] = useState<AgentTask[]>([])
+  const [reasoningSteps, setReasoningSteps] = useState<ReasoningStep[]>([])
   const [isGeneratingTask, setIsGeneratingTask] = useState(false)
   const [processingState, setProcessingState] = useState<ProcessingState>("idle")
   const [lastActivityTimestamp, setLastActivityTimestamp] = useState<number>(0)
@@ -75,7 +77,8 @@ export function useChat(): UseChatReturn {
     // Configurar un nuevo temporizador si estamos en un estado de espera
     if (processingState === "tool_processing" || 
         processingState === "waiting_result" || 
-        processingState === "analyzing") {
+        processingState === "analyzing" ||
+        processingState === "reasoning") {
       
       inactivityTimerRef.current = setTimeout(() => {
         // Si no hay actividad después de 3 segundos, actualizar el estado
@@ -88,6 +91,22 @@ export function useChat(): UseChatReturn {
       }, 3000);
     }
   }, [processingState, lastActivityTimestamp]);
+
+  // Función para procesar reasoning steps
+  const processReasoningSteps = useCallback((steps: ReasoningStep[]) => {
+    setReasoningSteps(prev => {
+      const newSteps = [...prev];
+      steps.forEach(step => {
+        const existingIndex = newSteps.findIndex(s => s.title === step.title);
+        if (existingIndex !== -1) {
+          newSteps[existingIndex] = step;
+        } else {
+          newSteps.push(step);
+        }
+      });
+      return newSteps;
+    });
+  }, []);
 
   // Verificar sesión de autenticación
   useEffect(() => {
@@ -165,6 +184,7 @@ export function useChat(): UseChatReturn {
     setMessages([])
     setSources([])
     setAgentTasks([])
+    setReasoningSteps([])
     setIsGeneratingTask(false)
     setProcessingState("idle")
     localStorage.removeItem("currentChatId")
@@ -191,9 +211,10 @@ export function useChat(): UseChatReturn {
       
       const rawMessages = (sessionData.memory?.messages || []) as Array<Message | ToolMessage>
 
-      // Reiniciamos las fuentes, tareas y el conjunto de tool_call_id
+      // Reiniciamos las fuentes, tareas, reasoning steps y el conjunto de tool_call_id
       setSources([])
       setAgentTasks([])
+      setReasoningSteps([])
       setIsGeneratingTask(false)
       processedToolIds.current.clear()
       pendingToolCalls.current.clear()
@@ -461,135 +482,200 @@ export function useChat(): UseChatReturn {
 
             for (const parsedData of jsonObjects) {
               try {
-                // 1. Actualiza el contenido del mensaje "assistant"
-                if (parsedData.event === "RunResponse" && parsedData.content !== undefined) {
-                  // Verificar si el contenido es string (podría ser objeto en Claude)
-                  const contentToAdd = typeof parsedData.content === 'string' 
-                    ? parsedData.content 
-                    : JSON.stringify(parsedData.content);
-                    
-                  // Verificar si este es un mensaje inicial indicando búsqueda
-                  const isInitialSearchMessage = typeof contentToAdd === 'string' && (
-                    contentToAdd.includes("realizaré una búsqueda") || 
-                    contentToAdd.includes("buscaré información") ||
-                    (contentToAdd.length < 200 && (
-                      contentToAdd.includes("buscar") || 
-                      contentToAdd.includes("búsqueda") ||
-                      contentToAdd.includes("obtener información")
-                    ))
-                  );
-                  
-                  // Si ya tenemos contenido y recibimos un mensaje inicial
-                  // No lo agregamos, ya que probablemente es parte de una respuesta fragmentada
-                  if (currentContentRef.current && isInitialSearchMessage) {
-                    console.log("Skipping initial search message as we already have content");
-                    continue; // Usamos continue para saltar solo esta iteración
-                  }
-                  
-                  // Si este es el primer contenido y es mensaje de búsqueda, lo guardamos como temporal
-                  if (!currentContentRef.current && isInitialSearchMessage) {
-                    currentContentRef.current = contentToAdd;
-                    setMessages(prev => updateAssistantMessage(prev, currentContentRef.current, "thinking", regenerate));
-                  } else {
-                    // Para otros casos (contenido sustancial o continuación)
-                    currentContentRef.current += contentToAdd;
-                    setMessages(prev => updateAssistantMessage(prev, currentContentRef.current, "responding", regenerate));
-                  }
-                  
-                  // Cambiar al estado de streaming cuando comenzamos a recibir contenido
-                  if (processingState !== "streaming") {
-                    setProcessingState("streaming");
+                // Procesar eventos específicos de Teams
+                switch (parsedData.event) {
+                  case "RunStarted":
+                    setProcessingState("thinking");
                     updateActivity();
-                  }
-                }
-                // 2. Cuando se completa la respuesta
-                else if (parsedData.event === "RunCompleted") {
-                  if (parsedData.content !== undefined) {
-                    // Verificar si el contenido es string
-                    const finalContent = typeof parsedData.content === 'string'
-                      ? parsedData.content
-                      : JSON.stringify(parsedData.content);
-                    
-                    // Verificar si el mensaje inicial era temporal (mensaje de búsqueda)
-                    // y si el contenido final es sustancialmente diferente
-                    const initialContent = currentContentRef.current;
-                    const isInitialTemporary = typeof initialContent === 'string' && (
-                      initialContent.includes("realizaré una búsqueda") || 
-                      initialContent.includes("buscaré información") ||
-                      (initialContent.length < 200 && (
-                        initialContent.includes("buscar") || 
-                        initialContent.includes("búsqueda") ||
-                        initialContent.includes("obtener información")
-                      ))
-                    );
-                    
-                    // Si el mensaje inicial era temporal y el contenido final es sustancial,
-                    // reemplazamos completamente en lugar de agregar
-                    if (isInitialTemporary && finalContent.length > initialContent.length * 2) {
-                      currentContentRef.current = finalContent;
-                    } else if (finalContent !== initialContent) {
-                      // En otros casos, si es diferente, lo actualizamos
-                      currentContentRef.current = finalContent;
+                    break;
+
+                  case "ReasoningStarted":
+                    setProcessingState("reasoning");
+                    updateActivity();
+                    break;
+
+                  case "ReasoningStep":
+                    if (parsedData.content && typeof parsedData.content === 'object') {
+                      const step = parsedData.content as ReasoningStep;
+                      processReasoningSteps([step]);
                     }
-                  }
-                  
-                  setMessages(prev => updateAssistantMessage(prev, currentContentRef.current, "complete", regenerate));
-                  
-                  // Establecer el estado como completado
-                  setProcessingState("completing");
-                  setTimeout(() => {
-                    setProcessingState("idle");
-                  }, 500);
-                  
-                  // Actualizar ID de sesión si está presente
-                  if (parsedData.session_id) {
-                    setCurrentChatId(parsedData.session_id)
-                    localStorage.setItem("currentChatId", parsedData.session_id)
-                    if (authSession?.user) {
-                      const sessions = await fetchUserSessions(authSession.user.id)
-                      setUserSessions(sessions)
+                    updateActivity();
+                    break;
+
+                  case "ReasoningCompleted":
+                    if (parsedData.extra_data?.reasoning_steps) {
+                      processReasoningSteps(parsedData.extra_data.reasoning_steps);
                     }
-                  }
-                }
-                // Cuando comienza una herramienta
-                else if (parsedData.event === "ToolCallStarted") {
-                  // Actualizar el estado a "tool_calling"
-                  setProcessingState("tool_calling");
-                  updateActivity();
-                  
-                  // Procesar tool_calls desde el objeto de tools (OpenAI style)
-                  if (parsedData.tools && Array.isArray(parsedData.tools)) {
-                    const toolObj = parsedData.tools[0];
-                    // Detección específica de herramienta "think"
-                    if (toolObj && toolObj.tool_name === "think") {
-                      setProcessingState("thinking");
-                      processToolCalls(
-                        [toolObj], 
+                    setProcessingState("analyzing");
+                    updateActivity();
+                    break;
+
+                  case "UpdatingMemory":
+                    setProcessingState("updating_memory");
+                    updateActivity();
+                    break;
+
+                  case "WorkflowStarted":
+                    setProcessingState("workflow_running");
+                    updateActivity();
+                    break;
+
+                  case "WorkflowCompleted":
+                    setProcessingState("analyzing");
+                    updateActivity();
+                    break;
+
+                  case "ToolCallStarted":
+                    setProcessingState("tool_calling");
+                    updateActivity();
+                    
+                    // Procesar tool_calls desde el objeto de tools (Teams style)
+                    if (parsedData.tools && Array.isArray(parsedData.tools)) {
+                      const toolObj = parsedData.tools[0];
+                      // Detección específica de herramienta "think"
+                      if (toolObj && toolObj.tool_name === "think") {
+                        setProcessingState("thinking");
+                        processToolCalls(
+                          [toolObj], 
+                          pendingToolCalls.current,
+                          setIsGeneratingTask,
+                          setProcessingState,
+                          updateActivity
+                        );
+                      }
+                    }
+                    break;
+
+                  case "ToolCallCompleted":
+                    setProcessingState("analyzing");
+                    updateActivity();
+                    
+                    // Procesar resultados de herramientas (Teams style)
+                    if (parsedData.tools && Array.isArray(parsedData.tools)) {
+                      processToolResults(
+                        parsedData.tools, 
                         pendingToolCalls.current,
-                        setIsGeneratingTask,
                         setProcessingState,
-                        updateActivity
+                        setIsGeneratingTask,
+                        updateActivity,
+                        setAgentTasks
                       );
                     }
-                  }
-                }
-                // Cuando se completa una herramienta
-                else if (parsedData.event === "ToolCallCompleted") {
-                  // Actualizamos a "analyzing" puesto que ahora está procesando el resultado
-                  setProcessingState("analyzing");
-                  updateActivity();
-                  
-                  // Procesar resultados de herramientas (OpenAI style)
-                  if (parsedData.tools && Array.isArray(parsedData.tools)) {
-                    processToolResults(
-                      parsedData.tools, 
-                      pendingToolCalls.current,
-                      setProcessingState,
-                      setIsGeneratingTask,
-                      updateActivity,
-                      setAgentTasks
-                    );
-                  }
+                    break;
+
+                  case "RunResponse":
+                    if (parsedData.content !== undefined) {
+                      // Verificar si el contenido es string (podría ser objeto en Claude)
+                      const contentToAdd = typeof parsedData.content === 'string' 
+                        ? parsedData.content 
+                        : JSON.stringify(parsedData.content);
+                        
+                      // Verificar si este es un mensaje inicial indicando búsqueda
+                      const isInitialSearchMessage = typeof contentToAdd === 'string' && (
+                        contentToAdd.includes("realizaré una búsqueda") || 
+                        contentToAdd.includes("buscaré información") ||
+                        (contentToAdd.length < 200 && (
+                          contentToAdd.includes("buscar") || 
+                          contentToAdd.includes("búsqueda") ||
+                          contentToAdd.includes("obtener información")
+                        ))
+                      );
+                      
+                      // Si ya tenemos contenido y recibimos un mensaje inicial
+                      // No lo agregamos, ya que probablemente es parte de una respuesta fragmentada
+                      if (currentContentRef.current && isInitialSearchMessage) {
+                        console.log("Skipping initial search message as we already have content");
+                        continue; // Usamos continue para saltar solo esta iteración
+                      }
+                      
+                      // Si este es el primer contenido y es mensaje de búsqueda, lo guardamos como temporal
+                      if (!currentContentRef.current && isInitialSearchMessage) {
+                        currentContentRef.current = contentToAdd;
+                        setMessages(prev => updateAssistantMessage(prev, currentContentRef.current, "thinking", regenerate));
+                      } else {
+                        // Para otros casos (contenido sustancial o continuación)
+                        currentContentRef.current += contentToAdd;
+                        setMessages(prev => updateAssistantMessage(prev, currentContentRef.current, "responding", regenerate));
+                      }
+                      
+                      // Cambiar al estado de streaming cuando comenzamos a recibir contenido
+                      if (processingState !== "streaming") {
+                        setProcessingState("streaming");
+                        updateActivity();
+                      }
+                    }
+                    break;
+
+                  case "RunCompleted":
+                    if (parsedData.content !== undefined) {
+                      // Verificar si el contenido es string
+                      const finalContent = typeof parsedData.content === 'string'
+                        ? parsedData.content
+                        : JSON.stringify(parsedData.content);
+                      
+                      // Verificar si el mensaje inicial era temporal (mensaje de búsqueda)
+                      // y si el contenido final es sustancialmente diferente
+                      const initialContent = currentContentRef.current;
+                      const isInitialTemporary = typeof initialContent === 'string' && (
+                        initialContent.includes("realizaré una búsqueda") || 
+                        initialContent.includes("buscaré información") ||
+                        (initialContent.length < 200 && (
+                          initialContent.includes("buscar") || 
+                          initialContent.includes("búsqueda") ||
+                          initialContent.includes("obtener información")
+                        ))
+                      );
+                      
+                      // Si el mensaje inicial era temporal y el contenido final es sustancial,
+                      // reemplazamos completamente en lugar de agregar
+                      if (isInitialTemporary && finalContent.length > initialContent.length * 2) {
+                        currentContentRef.current = finalContent;
+                      } else if (finalContent !== initialContent) {
+                        // En otros casos, si es diferente, lo actualizamos
+                        currentContentRef.current = finalContent;
+                      }
+                    }
+                    
+                    setMessages(prev => updateAssistantMessage(prev, currentContentRef.current, "complete", regenerate));
+                    
+                    // Establecer el estado como completado
+                    setProcessingState("completing");
+                    setTimeout(() => {
+                      setProcessingState("idle");
+                    }, 500);
+                    
+                    // Actualizar ID de sesión si está presente
+                    if (parsedData.session_id) {
+                      setCurrentChatId(parsedData.session_id)
+                      localStorage.setItem("currentChatId", parsedData.session_id)
+                      if (authSession?.user) {
+                        const sessions = await fetchUserSessions(authSession.user.id)
+                        setUserSessions(sessions)
+                      }
+                    }
+                    break;
+
+                  case "RunError":
+                    console.error("Run error:", parsedData.content);
+                    setMessages(prev => updateAssistantMessage(
+                      prev,
+                      currentContentRef.current || "Error en la ejecución del chat",
+                      "complete",
+                      regenerate
+                    ));
+                    setProcessingState("idle");
+                    break;
+
+                  case "RunCancelled":
+                    console.log("Run cancelled");
+                    setMessages(prev => updateAssistantMessage(
+                      prev,
+                      currentContentRef.current + "\n\n[Conversación cancelada]",
+                      "complete",
+                      regenerate
+                    ));
+                    setProcessingState("idle");
+                    break;
                 }
                 
                 // 3. Procesar tool_calls en mensajes del asistente
@@ -656,11 +742,11 @@ export function useChat(): UseChatReturn {
                   );
                 }
                 
-                // 5. Procesar herramientas del formato OpenAI
+                // 5. Procesar herramientas del formato Teams
                 if (parsedData.tools && Array.isArray(parsedData.tools)) {
                   try {
                     const toolCalls = (parsedData.tools as Array<Record<string, unknown>>).filter((tool) => 
-                      tool.tool_name && tool.tool_args && !tool.content);
+                      tool.tool_name && tool.tool_args && !tool.result);
                     
                     if (toolCalls.length > 0) {
                       processToolCalls(
@@ -673,7 +759,7 @@ export function useChat(): UseChatReturn {
                     }
                     
                     const toolResults = (parsedData.tools as Array<Record<string, unknown>>).filter((tool) => 
-                      tool.tool_call_id && tool.content);
+                      tool.tool_call_id && tool.result);
                     
                     if (toolResults.length > 0) {
                       processToolResults(
@@ -689,6 +775,19 @@ export function useChat(): UseChatReturn {
                     console.warn("Error processing tools array:", toolsError);
                   }
                 }
+
+                // 6. Procesar reasoning content si está presente
+                if (parsedData.reasoning_content) {
+                  // El reasoning content se procesa automáticamente via ReasoningStep events
+                  updateActivity();
+                }
+
+                // 7. Procesar member responses si están presentes
+                if (parsedData.member_responses && Array.isArray(parsedData.member_responses)) {
+                  // Procesar respuestas de miembros del equipo si es necesario
+                  updateActivity();
+                }
+
               } catch (dataError) {
                 console.error("Error processing parsed data:", dataError);
               }
@@ -760,7 +859,8 @@ export function useChat(): UseChatReturn {
       createNewChat, 
       updateActivity,
       processingState,
-      currentModel
+      currentModel,
+      processReasoningSteps
     ]
   )
 
@@ -828,6 +928,7 @@ export function useChat(): UseChatReturn {
     canStopResponse,
     sources,
     agentTasks,
+    reasoningSteps,
     isGeneratingTask,
     processingState,
     currentModel,

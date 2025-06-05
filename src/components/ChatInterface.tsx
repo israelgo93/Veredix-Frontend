@@ -36,7 +36,7 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import rehypeRaw from "rehype-raw"
 import { useChat } from "../hooks/useChat"
-import type { Source, AgentTask } from "../hooks/types"
+import type { Source, AgentTask, ReasoningStep } from "../hooks/types"
 import AutoResizingTextarea from "./AutoResizingTextarea"
 import {
   Tooltip,
@@ -157,6 +157,31 @@ const TasksList = ({ tasks }: { tasks: AgentTask[] }) => {
   )
 }
 
+const ReasoningList = ({ steps }: { steps: ReasoningStep[] }) => (
+  <div className="space-y-3">
+    <h3 className="text-sm font-semibold text-primary mb-3 border-b pb-1">Pasos de Razonamiento</h3>
+    {steps.map((step, index) => (
+      <div key={index} className="border-b border-border pb-3 mb-3">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-semibold text-xs md:text-sm">{step.title}</span>
+          <span className="text-xs text-muted-foreground">
+            Confianza: {(step.confidence * 100).toFixed(0)}%
+          </span>
+        </div>
+        <div className="text-xs text-muted-foreground mb-2">
+          <p className="whitespace-pre-line">{step.reasoning}</p>
+          {step.action && (
+            <p className="mt-2 font-medium">Acción: {step.action}</p>
+          )}
+          {step.result && (
+            <p className="mt-2 font-medium">Resultado: {step.result}</p>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+)
+
 interface MessageActionsProps {
   content: string | Record<string, unknown> | Array<Record<string, unknown>>
   copyToClipboard: (text: string) => void
@@ -165,7 +190,9 @@ interface MessageActionsProps {
   toggleSources?: () => void
   hasTasks?: boolean
   toggleTasks?: () => void
-  isThinking?: boolean // Nueva propiedad para detectar proceso de pensamiento
+  hasReasoning?: boolean
+  toggleReasoning?: () => void
+  isThinking?: boolean
 }
 
 // Definir un tipo para los elementos dentro de los arrays de contenido
@@ -184,6 +211,8 @@ const MessageActions = ({
   toggleSources,
   hasTasks = false,
   toggleTasks,
+  hasReasoning = false,
+  toggleReasoning,
   isThinking = false,
 }: MessageActionsProps) => {
   const [copied, setCopied] = useState(false)
@@ -352,6 +381,25 @@ const MessageActions = ({
             </TooltipContent>
           </Tooltip>
         )}
+
+        {/* Nuevo botón para reasoning steps */}
+        {hasReasoning && toggleReasoning && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-0 transition-transform duration-200 hover:scale-105 active:scale-95"
+                onClick={toggleReasoning}
+              >
+                <Brain className="h-4 w-4 text-purple-500" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Ver razonamiento detallado</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </TooltipProvider>
   )
@@ -467,6 +515,61 @@ const TasksDrawer = ({ tasks, onClose }: TasksDrawerProps) => {
             <div className="relative flex-1 overflow-y-auto px-4 py-6">
               <div className="space-y-6">
                 <TasksList tasks={tasks} />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+interface ReasoningDrawerProps {
+  steps: ReasoningStep[]
+  onClose: () => void
+}
+
+const ReasoningDrawer = ({ steps, onClose }: ReasoningDrawerProps) => {
+  const drawerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (drawerRef.current && !drawerRef.current.contains(event.target as Node)) {
+        onClose()
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [onClose])
+
+  return (
+    <div className="fixed inset-0 z-[999999] overflow-hidden">
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+        <div
+          ref={drawerRef}
+          className="w-screen max-w-md transform transition-all duration-300 ease-in-out relative"
+        >
+          <button
+            onClick={onClose}
+            className="absolute top-2 right-2 z-[10000] rounded-md p-2 text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary transition-transform duration-200 hover:scale-105 active:scale-95"
+            aria-label="Cerrar panel de razonamiento"
+          >
+            <ChevronsRight className="h-6 w-6" />
+          </button>
+          <div className="flex h-full flex-col overflow-hidden bg-background/50 backdrop-blur-sm rounded-xl shadow-lg">
+            <div className="sticky top-0 z-50 flex items-center justify-between border-b bg-background/70 px-4 py-3">
+              <h2 className="text-lg font-semibold flex items-center">
+                <Brain className="h-5 w-5 mr-2 text-purple-500" />
+                Razonamiento Detallado
+              </h2>
+            </div>
+            <div className="relative flex-1 overflow-y-auto px-4 py-6">
+              <div className="space-y-6">
+                <ReasoningList steps={steps} />
               </div>
             </div>
           </div>
@@ -640,6 +743,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
     isLoading,
     sources,
     agentTasks,
+    reasoningSteps,
     isGeneratingTask,
     processingState,
     currentModel,
@@ -656,6 +760,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
   const [input, setInput] = useState("")
   const [showSources, setShowSources] = useState(false)
   const [showTasks, setShowTasks] = useState(false)
+  const [showReasoning, setShowReasoning] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showScrollButton, setShowScrollButton] = useState(false)
   const [regeneratingIndex, setRegeneratingIndex] = useState<number | null>(null)
@@ -1099,7 +1204,7 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                     (regeneratingIndex === index || (isLoading && index === messages.length - 1 && !message.content));
                   
                   // Detectar si hay proceso de pensamiento activo (para mostrar el botón de tareas)
-                  const isThinking = processingState === "thinking" || agentTasks.some(task => task.agent === "think");
+                  const isThinking = processingState === "thinking" || processingState === "reasoning" || agentTasks.some(task => task.agent === "think");
                   
                   // Verificar si el mensaje es un mensaje de error
                   const isErrorMessage = 
@@ -1163,6 +1268,8 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                                 toggleSources={() => setShowSources((prev) => !prev)}
                                 hasTasks={agentTasks.length > 0}
                                 toggleTasks={() => setShowTasks((prev) => !prev)}
+                                hasReasoning={reasoningSteps.length > 0}
+                                toggleReasoning={() => setShowReasoning((prev) => !prev)}
                                 isThinking={isThinking}
                               />
                             )}
@@ -1191,8 +1298,6 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
                         </button>
                       </div>
                     )}
-                    
-                    {/* Se eliminan los indicadores sobre el textarea */}
                     
                     <form onSubmit={handleSubmit} className="relative flex flex-col gap-2">
                       <div className="relative">
@@ -1264,6 +1369,11 @@ export default function ChatInterface({ onChatStarted, onNewChat }: ChatInterfac
       {/* Panel de Tareas de Agentes */}
       {showTasks && agentTasks.length > 0 && (
         <TasksDrawer tasks={agentTasks} onClose={() => setShowTasks(false)} />
+      )}
+
+      {/* Panel de Reasoning Steps */}
+      {showReasoning && reasoningSteps.length > 0 && (
+        <ReasoningDrawer steps={reasoningSteps} onClose={() => setShowReasoning(false)} />
       )}
 
       {/* Renderizado del Sidebar */}

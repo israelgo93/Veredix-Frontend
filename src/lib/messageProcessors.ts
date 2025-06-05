@@ -1,5 +1,5 @@
 // src/lib/messageProcessors.ts
-import type { ApiResponse, Message, ToolMessage, Source } from "../hooks/types";
+import type { ApiResponse, Message, ToolMessage, Source, ReasoningStep } from "../hooks/types";
 
 /**
  * Procesa un chunk de texto para extraer objetos JSON válidos
@@ -51,7 +51,7 @@ export function processJsonObjects(
           if (parsed.event && parsed.content !== undefined) {
             jsonObjects.push(parsed);
             
-            // Identificar el modelo basado en la respuesta
+            // Identificar el modelo basado en la respuesta (teams o agents)
             if (setCurrentModel && parsed.model && !currentModel) {
               if (parsed.model.includes("claude")) {
                 setCurrentModel("claude");
@@ -209,5 +209,200 @@ export function processSourcesFromToolMessage(
   } catch (error) {
     console.error("Error in processSourcesFromToolMessage:", error);
     return [];
+  }
+}
+
+/**
+ * Procesa reasoning steps desde las respuestas de la API
+ */
+export function processReasoningSteps(
+  apiResponse: ApiResponse,
+  setReasoningSteps: (updater: (prev: ReasoningStep[]) => ReasoningStep[]) => void
+): void {
+  try {
+    // Procesar reasoning steps desde extra_data
+    if (apiResponse.extra_data?.reasoning_steps && Array.isArray(apiResponse.extra_data.reasoning_steps)) {
+      setReasoningSteps(prev => {
+        const newSteps = [...prev];
+        apiResponse.extra_data!.reasoning_steps!.forEach(step => {
+          const existingIndex = newSteps.findIndex(s => s.title === step.title);
+          if (existingIndex !== -1) {
+            newSteps[existingIndex] = step;
+          } else {
+            newSteps.push(step);
+          }
+        });
+        return newSteps;
+      });
+    }
+
+    // Procesar reasoning step individual desde content (cuando event es ReasoningStep)
+    if (apiResponse.event === "ReasoningStep" && apiResponse.content && typeof apiResponse.content === 'object') {
+      const step = apiResponse.content as ReasoningStep;
+      setReasoningSteps(prev => {
+        const newSteps = [...prev];
+        const existingIndex = newSteps.findIndex(s => s.title === step.title);
+        if (existingIndex !== -1) {
+          newSteps[existingIndex] = step;
+        } else {
+          newSteps.push(step);
+        }
+        return newSteps;
+      });
+    }
+  } catch (error) {
+    console.error("Error processing reasoning steps:", error);
+  }
+}
+
+/**
+ * Procesa formatted tool calls desde las respuestas de la API de teams
+ */
+export function processFormattedToolCalls(
+  formattedToolCalls: string[] | undefined,
+  setAgentTasks: (updater: (prev: any[]) => any[]) => void
+): void {
+  try {
+    if (!formattedToolCalls || !Array.isArray(formattedToolCalls)) {
+      return;
+    }
+
+    formattedToolCalls.forEach((toolCallStr, index) => {
+      try {
+        // Parsear el string de tool call formateado
+        // Ejemplo: "think(title=Identificando la consulta del usuario, thought=El usuario me está preguntando...)"
+        const match = toolCallStr.match(/^(\w+)\((.*)\)$/);
+        if (!match) return;
+
+        const [, toolName, argsStr] = match;
+        
+        // Crear una tarea básica desde el tool call formateado
+        const taskId = `formatted_${Date.now()}_${index}`;
+        const newTask = {
+          id: taskId,
+          agent: toolName,
+          task: argsStr,
+          result: "Ejecutando...",
+          timestamp: new Date().toISOString()
+        };
+
+        setAgentTasks(prev => {
+          const exists = prev.some(task => task.id === newTask.id);
+          if (!exists) {
+            return [...prev, newTask];
+          }
+          return prev;
+        });
+      } catch (toolCallError) {
+        console.warn("Error processing formatted tool call:", toolCallError);
+      }
+    });
+  } catch (error) {
+    console.error("Error in processFormattedToolCalls:", error);
+  }
+}
+
+/**
+ * Procesa member responses desde las respuestas de la API de teams
+ */
+export function processMemberResponses(
+  memberResponses: any[] | undefined,
+  setAgentTasks: (updater: (prev: any[]) => any[]) => void
+): void {
+  try {
+    if (!memberResponses || !Array.isArray(memberResponses)) {
+      return;
+    }
+
+    memberResponses.forEach((response, index) => {
+      try {
+        const taskId = `member_${response.member_id || index}_${Date.now()}`;
+        const newTask = {
+          id: taskId,
+          agent: response.member_id || `member_${index}`,
+          task: response.request || "Tarea de miembro del equipo",
+          result: response.response || response.content || "Respuesta procesada",
+          timestamp: new Date().toISOString()
+        };
+
+        setAgentTasks(prev => {
+          const exists = prev.some(task => task.id === newTask.id);
+          if (!exists) {
+            return [...prev, newTask];
+          }
+          return prev;
+        });
+      } catch (memberError) {
+        console.warn("Error processing member response:", memberError);
+      }
+    });
+  } catch (error) {
+    console.error("Error in processMemberResponses:", error);
+  }
+}
+
+/**
+ * Procesa reasoning content desde las respuestas de la API
+ */
+export function processReasoningContent(
+  reasoningContent: string | undefined,
+  setReasoningSteps: (updater: (prev: ReasoningStep[]) => ReasoningStep[]) => void
+): void {
+  try {
+    if (!reasoningContent || typeof reasoningContent !== 'string') {
+      return;
+    }
+
+    // Parsear el reasoning content que viene en formato markdown
+    // Ejemplo: "## Identificando la consulta del usuario\nEl usuario me está preguntando..."
+    const sections = reasoningContent.split('##').filter(section => section.trim());
+    
+    sections.forEach((section, index) => {
+      try {
+        const lines = section.trim().split('\n');
+        if (lines.length === 0) return;
+
+        const title = lines[0].trim();
+        const content = lines.slice(1).join('\n').trim();
+        
+        // Extraer información específica del contenido
+        let action = null;
+        let confidence = 1.0;
+        
+        const actionMatch = content.match(/Action:\s*(.+)/);
+        if (actionMatch) {
+          action = actionMatch[1].trim();
+        }
+        
+        const confidenceMatch = content.match(/Confidence:\s*([0-9.]+)/);
+        if (confidenceMatch) {
+          confidence = parseFloat(confidenceMatch[1]);
+        }
+
+        const step: ReasoningStep = {
+          title,
+          action,
+          result: null,
+          reasoning: content,
+          next_action: "continue",
+          confidence
+        };
+
+        setReasoningSteps(prev => {
+          const newSteps = [...prev];
+          const existingIndex = newSteps.findIndex(s => s.title === step.title);
+          if (existingIndex !== -1) {
+            newSteps[existingIndex] = step;
+          } else {
+            newSteps.push(step);
+          }
+          return newSteps;
+        });
+      } catch (sectionError) {
+        console.warn("Error processing reasoning section:", sectionError);
+      }
+    });
+  } catch (error) {
+    console.error("Error in processReasoningContent:", error);
   }
 }

@@ -1,11 +1,11 @@
 // src/lib/toolProcessors.ts
-import type { ToolCall, AgentTask, ProcessingState, Message, ToolMessage } from "../hooks/types";
+import type { ToolCall, AgentTask, ProcessingState, Message, ToolMessage, TeamTool } from "../hooks/types";
 
 /**
- * Procesa las llamadas a herramientas
+ * Procesa las llamadas a herramientas (compatibilidad agents y teams)
  */
 export function processToolCalls(
-  toolCalls: Array<ToolCall> | undefined,
+  toolCalls: Array<ToolCall | TeamTool> | undefined,
   pendingToolCalls: Map<string, {agent: string, task: string}>,
   setIsGeneratingTask: (value: boolean) => void,
   setProcessingState: (state: ProcessingState) => void,
@@ -21,22 +21,92 @@ export function processToolCalls(
     
     toolCalls.forEach(call => {
       try {
-        // Asegurarnos de que tenemos un ID y nombre de función válidos (estructura puede variar entre modelos)
-        const callId = call.id || call.tool_call_id;
-        let functionName = '';
-        
-        // Manejar estructura de Claude
-        if (call.function && call.function.name) {
-          functionName = call.function.name;
-        } 
-        // Manejar estructura de OpenAI
-        else if (call.tool_name) {
+        // Manejar tanto formato agents como teams
+        let callId: string;
+        let functionName: string;
+        let taskDescription: string;
+
+        // Formato Teams (TeamTool)
+        if ('tool_name' in call && call.tool_name) {
+          callId = call.tool_call_id;
           functionName = call.tool_name;
+          
+          // Extraer descripción de la tarea
+          try {
+            if (call.tool_args) {
+              // Manejo especial para herramienta "think"
+              if (functionName === "think" && call.tool_args.thought) {
+                taskDescription = JSON.stringify(call.tool_args);
+              } else {
+                taskDescription = typeof call.tool_args.task_description === 'string'
+                  ? call.tool_args.task_description 
+                  : JSON.stringify(call.tool_args);
+              }
+            } else {
+              taskDescription = "Tarea sin descripción";
+            }
+          } catch (parseError) {
+            console.warn("Error parsing team tool arguments:", parseError);
+            taskDescription = JSON.stringify(call.tool_args) || "Tarea sin descripción";
+          }
         }
-        
-        if (!callId || !functionName) {
-          console.warn("Invalid tool call, missing id or function name", call);
-          return; // Continuar con el siguiente
+        // Formato Agents (ToolCall) 
+        else {
+          // Asegurarnos de que tenemos un ID y nombre de función válidos
+          callId = call.id || call.tool_call_id || '';
+          
+          // Manejar estructura de Claude
+          if (call.function && call.function.name) {
+            functionName = call.function.name;
+          } 
+          // Manejar estructura de OpenAI
+          else if ('tool_name' in call && call.tool_name) {
+            functionName = call.tool_name;
+          } else {
+            functionName = '';
+          }
+          
+          if (!callId || !functionName) {
+            console.warn("Invalid tool call, missing id or function name", call);
+            return; // Continuar con el siguiente
+          }
+
+          // Extraer la descripción de la tarea de los argumentos
+          try {
+            // Para Claude
+            if (call.function && call.function.arguments) {
+              const args = typeof call.function.arguments === 'string'
+                ? JSON.parse(call.function.arguments)
+                : call.function.arguments;
+              
+              // Manejo especial para herramienta "think"
+              if (functionName === "think" && args.thought) {
+                taskDescription = JSON.stringify(args);
+              } else {
+                taskDescription = typeof args.task_description === 'string' 
+                  ? args.task_description 
+                  : JSON.stringify(args);
+              }
+            } 
+            // Para OpenAI o Teams
+            else if ('tool_args' in call && call.tool_args) {
+              // Manejo especial para herramienta "think"
+              if (functionName === "think" && call.tool_args.thought) {
+                taskDescription = JSON.stringify(call.tool_args);
+              } else {
+                taskDescription = typeof call.tool_args.task_description === 'string'
+                  ? call.tool_args.task_description 
+                  : JSON.stringify(call.tool_args);
+              }
+            } else {
+              taskDescription = "Tarea sin descripción";
+            }
+          } catch (parseError) {
+            console.warn("Error parsing tool arguments:", parseError);
+            taskDescription = typeof call.function?.arguments === 'string'
+              ? call.function.arguments
+              : JSON.stringify(call.tool_args) || "Tarea sin descripción";
+          }
         }
         
         // Extraer el nombre del agente de la función
@@ -49,42 +119,6 @@ export function processToolCalls(
         // Extraer el nombre del agente si está en formato "transfer_task_to_X"
         else if (functionName.startsWith("transfer_task_to_")) {
           agentName = functionName.replace("transfer_task_to_", "");
-        }
-        
-        // Extraer la descripción de la tarea de los argumentos
-        let taskDescription = "";
-        try {
-          // Para Claude
-          if (call.function && call.function.arguments) {
-            const args = typeof call.function.arguments === 'string'
-              ? JSON.parse(call.function.arguments)
-              : call.function.arguments;
-            
-            // Manejo especial para herramienta "think"
-            if (functionName === "think" && args.thought) {
-              taskDescription = JSON.stringify(args);
-            } else {
-              taskDescription = typeof args.task_description === 'string' 
-                ? args.task_description 
-                : JSON.stringify(args);
-            }
-          } 
-          // Para OpenAI
-          else if (call.tool_args) {
-            // Manejo especial para herramienta "think"
-            if (functionName === "think" && call.tool_args.thought) {
-              taskDescription = JSON.stringify(call.tool_args);
-            } else {
-              taskDescription = typeof call.tool_args.task_description === 'string'
-                ? call.tool_args.task_description 
-                : JSON.stringify(call.tool_args);
-            }
-          }
-        } catch (parseError) {
-          console.warn("Error parsing tool arguments:", parseError);
-          taskDescription = typeof call.function?.arguments === 'string'
-            ? call.function.arguments
-            : JSON.stringify(call.tool_args) || "Tarea sin descripción";
         }
         
         // Guardar en pendingToolCalls para completar cuando llegue el resultado
@@ -109,10 +143,10 @@ export function processToolCalls(
 }
 
 /**
- * Procesa los resultados de herramientas
+ * Procesa los resultados de herramientas (compatibilidad agents y teams)
  */
 export function processToolResults(
-  toolResults: Array<Record<string, unknown>> | undefined,
+  toolResults: Array<Record<string, unknown> | TeamTool> | undefined,
   pendingToolCalls: Map<string, {agent: string, task: string}>,
   setProcessingState: (state: ProcessingState) => void,
   setIsGeneratingTask: (value: boolean) => void,
@@ -176,8 +210,14 @@ export function processToolResults(
     
     toolResults.forEach(result => {
       try {
+        // Formato Teams (TeamTool con resultado)
+        if ('tool_call_id' in result && 'tool_name' in result && 'result' in result && result.result) {
+          const teamTool = result as TeamTool;
+          handleToolResult(teamTool.tool_call_id, teamTool.result as string, teamTool.tool_name);
+          resultsProcessed = true;
+        }
         // Para herramienta "think" - buscar patrón específico
-        if (result.tool_name === "think" && result.tool_call_id && typeof result.content === 'string') {
+        else if (result.tool_name === "think" && result.tool_call_id && typeof result.content === 'string') {
           handleToolResult(result.tool_call_id as string, result.content, "think");
           resultsProcessed = true;
         }
@@ -229,7 +269,7 @@ export function processHistoricalToolResult(
       return msg.role === "assistant" && 
              msg.tool_calls && 
              Array.isArray(msg.tool_calls) &&
-             msg.tool_calls.some((call) => call.id === toolId);
+             msg.tool_calls.some((call) => call.id === toolId || call.tool_call_id === toolId);
     });
     
     let agentName = "desconocido";
@@ -237,7 +277,7 @@ export function processHistoricalToolResult(
     
     if (toolCallMessage) {
       if (toolCallMessage.tool_calls && Array.isArray(toolCallMessage.tool_calls)) {
-        const toolCall = toolCallMessage.tool_calls.find((call) => call.id === toolId);
+        const toolCall = toolCallMessage.tool_calls.find((call) => call.id === toolId || call.tool_call_id === toolId);
         
         if (toolCall?.function) {
           // Extraer nombre del agente
@@ -266,6 +306,26 @@ export function processHistoricalToolResult(
               : "Tarea sin descripción";
           }
         }
+        // Manejar formato teams en historial
+        else if ('tool_name' in toolCall) {
+          agentName = toolCall.tool_name as string;
+          
+          if (agentName.startsWith("transfer_task_to_")) {
+            agentName = agentName.replace("transfer_task_to_", "");
+          }
+          
+          try {
+            if ('tool_args' in toolCall && toolCall.tool_args) {
+              const args = toolCall.tool_args;
+              taskDescription = typeof args.task_description === 'string'
+                ? args.task_description
+                : JSON.stringify(args);
+            }
+          } catch (parseError) {
+            console.warn("Error parsing team tool arguments:", parseError);
+            taskDescription = JSON.stringify(toolCall.tool_args) || "Tarea sin descripción";
+          }
+        }
       }
     }
     
@@ -287,6 +347,53 @@ export function processHistoricalToolResult(
       return prev;
     });
   } catch (resultError) {
-    console.error("Error in handleToolResult:", resultError);
+    console.error("Error in processHistoricalToolResult:", resultError);
+  }
+}
+
+/**
+ * Procesa formatted tool calls específicos de teams
+ */
+export function processFormattedToolCalls(
+  formattedToolCalls: string[] | undefined,
+  setAgentTasks: (updater: (prev: AgentTask[]) => AgentTask[]) => void
+): void {
+  try {
+    if (!formattedToolCalls || !Array.isArray(formattedToolCalls)) {
+      return;
+    }
+
+    formattedToolCalls.forEach((toolCallStr, index) => {
+      try {
+        // Parsear el string de tool call formateado
+        // Ejemplo: "think(title=Identificando la consulta del usuario, thought=El usuario me está preguntando...)"
+        const match = toolCallStr.match(/^(\w+)\((.*)\)$/);
+        if (!match) return;
+
+        const [, toolName, argsStr] = match;
+        
+        // Crear una tarea básica desde el tool call formateado
+        const taskId = `formatted_${Date.now()}_${index}`;
+        const newTask: AgentTask = {
+          id: taskId,
+          agent: toolName,
+          task: argsStr,
+          result: "Ejecutando...",
+          timestamp: new Date().toISOString()
+        };
+
+        setAgentTasks(prev => {
+          const exists = prev.some(task => task.id === newTask.id);
+          if (!exists) {
+            return [...prev, newTask];
+          }
+          return prev;
+        });
+      } catch (toolCallError) {
+        console.warn("Error processing formatted tool call:", toolCallError);
+      }
+    });
+  } catch (error) {
+    console.error("Error in processFormattedToolCalls:", error);
   }
 }

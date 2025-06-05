@@ -12,7 +12,7 @@ export async function fetchUserSessions(userId: string): Promise<UserSession[]> 
   if (!userId) return [];
   try {
     const response = await fetch(
-      `${API_BASE_URL}/agents/veredix/sessions?user_id=${userId}`
+      `${API_BASE_URL}/teams/veredix/sessions?user_id=${userId}`
     );
     if (!response.ok) {
       throw new Error(`Failed to fetch user sessions: ${response.status}`);
@@ -30,7 +30,7 @@ export async function fetchUserSessions(userId: string): Promise<UserSession[]> 
 export async function deleteUserSession(userId: string, sessionId: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/agents/veredix/sessions/${sessionId}?user_id=${userId}`,
+      `${API_BASE_URL}/teams/veredix/sessions/${sessionId}?user_id=${userId}`,
       {
         method: "DELETE",
       }
@@ -48,7 +48,7 @@ export async function deleteUserSession(userId: string, sessionId: string): Prom
 export async function renameUserSession(userId: string, sessionId: string, newTitle: string): Promise<boolean> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/agents/veredix/sessions/${sessionId}/rename`,
+      `${API_BASE_URL}/teams/veredix/sessions/${sessionId}/rename`,
       {
         method: "POST",
         headers: {
@@ -73,7 +73,7 @@ export async function renameUserSession(userId: string, sessionId: string, newTi
 export async function loadUserSession(userId: string, chatId: string): Promise<SessionData> {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/agents/veredix/sessions/${chatId}?user_id=${userId}`
+      `${API_BASE_URL}/teams/veredix/sessions/${chatId}?user_id=${userId}`
     );
     if (!response.ok) {
       throw new Error(`Failed to load session: ${response.status}`);
@@ -86,7 +86,7 @@ export async function loadUserSession(userId: string, chatId: string): Promise<S
 }
 
 /**
- * Envía un mensaje al agente
+ * Envía un mensaje al equipo (teams)
  */
 export async function sendMessageToAgent(
   message: string,
@@ -101,7 +101,7 @@ export async function sendMessageToAgent(
   formData.append("session_id", sessionId || "");
   formData.append("user_id", userId || getUserId());
 
-  return fetch(`${API_BASE_URL}/agents/veredix/runs`, {
+  return fetch(`${API_BASE_URL}/teams/veredix/runs`, {
     method: "POST",
     body: formData,
     signal,
